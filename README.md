@@ -1,10 +1,7 @@
 # Python Text to Audio Converter
 
 ## About this Project
-This Python program converts text files to audio. It's forked from the python-pdf-audio repository created by [TiffinTech](https://github.com/TiffinTech). Below are links to the original developer and repository:
-
-- TiffinTech Profile: [https://github.com/TiffinTech](https://github.com/TiffinTech)
-- Original Repository: [https://github.com/TiffinTech/python-pdf-audo](https://github.com/TiffinTech/python-pdf-audo)
+This is a desktop app that converts text, PDF, and ebook files to audio using offline text-to-speech. It started as a fork of [TiffinTech](https://github.com/TiffinTech)'s [python-pdf-audo](https://github.com/TiffinTech/python-pdf-audo) — a small, unlicensed example script — but has since been rewritten end to end (UI, conversion pipeline, TTS engine, packaging) and lives here as its own standalone, MIT-licensed project rather than a GitHub fork of that repository. See [LICENSE](LICENSE) for terms.
 
 The main goals of this project are to:
 - Create a Python program to convert text files to audio for use on any common platform.
@@ -29,7 +26,7 @@ pip install pyttsx3 PyPDF2 ttkbootstrap
 ```
 3. Clone or download this repository:
 ```
-git clone https://github.com/brando5393/python-text-to-audio.git
+git clone https://github.com/brando5393/python-text-to-audio-standalone.git
 ```
 4. Navigate to the project directory
 5. Run the program:
@@ -60,5 +57,5 @@ python main.py
 - **Tests**: there's no automated test coverage yet; a few unit tests around `Converter` and `FileManager` (mocking `pyttsx3`/file dialogs) would catch regressions like the PyPDF2 API break that was fixed here.
 - **Migrate PyPDF2 → pypdf**: PyPDF2 is now archived upstream in favor of `pypdf`; consider switching before PyPDF2 stops receiving updates.
 - **Dark mode toggle**: expose the `darkly`/`flatly` theme switch as an in-app button instead of a code constant.
-- **Repo hygiene**: enable Issues on the GitHub repo, turn on "delete branch on merge", and add a license if you want to make reuse terms explicit.
+- **Repo hygiene**: enable Issues on the GitHub repo and turn on "delete branch on merge".
 
