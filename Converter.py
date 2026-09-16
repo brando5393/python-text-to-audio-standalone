@@ -1,56 +1,65 @@
+import os
+import queue
+import threading
+
 import pyttsx3
-import PyPDF2
+
 import LogManager as logger
+import TextExtraction
+
 
 class Converter:
+    """Converts documents to audio.
+
+    Conversion runs on a background worker thread so the UI stays responsive; results
+    (including per-file success/failure) are delivered back to the caller via a
+    thread-safe queue that the UI polls with Tk's `after()`.
+    """
+
     def __init__(self, app_log_display):
-        # Initialize the logger attribute
         self.logger = logger.LogManager(app_log_display)
+        self._events = queue.Queue()
 
-    def convert_to_audio(self, files):
-        """Checks if the specified file(s) are in text or PDF format and converts them to an audio file"""
+    def convert_to_audio(self, files, output_dir):
+        """Queues `files` for background conversion into `output_dir`. Non-blocking."""
+        worker = threading.Thread(target=self._convert_worker, args=(list(files), output_dir), daemon=True)
+        worker.start()
 
-        # Initialize the text-to-speech engine
+    def poll_events(self):
+        """Drains and returns any conversion results produced since the last poll."""
+        events = []
+        while True:
+            try:
+                events.append(self._events.get_nowait())
+            except queue.Empty:
+                break
+        return events
+
+    def _convert_worker(self, files, output_dir):
         speaker = pyttsx3.init()
+        os.makedirs(output_dir, exist_ok=True)
 
-        # Iterate through the list of files
         for file in files:
             try:
-                # Check if the file has a ".txt" or ".pdf" extension
-                if file.endswith((".txt", ".pdf")):
-                    # If it's a text file
-                    if file.endswith(".txt"):
-                        # Read the content of the text file with specified encoding
-                        with open(file, "r", encoding="utf-8") as txt_file:
-                            text = txt_file.read()
-                    # If it's a PDF file
-                    elif file.endswith(".pdf"):
-                        # Extract text from each page in the PDF
-                        text = ""
-                        with open(file, 'rb') as pdf_file:
-                            pdfreader = PyPDF2.PdfReader(pdf_file)
-                            for page in pdfreader.pages:
-                                text += page.extract_text()
+                if not file.lower().endswith(TextExtraction.SUPPORTED_EXTENSIONS):
+                    self.logger.add_event("alert", "The specified file is not supported and could not be converted.", file)
+                    self._events.put(("skipped", file, None))
+                    continue
 
-                    # Clean the text by removing extra whitespace and line breaks
-                    clean_text = text.strip().replace('\n', ' ')
+                text = TextExtraction.extract_text(file)
+                clean_text = text.strip().replace("\n", " ")
+                if not clean_text:
+                    raise ValueError("No extractable text was found in this file")
 
-                    # Generate an output filename based on the input filename,
-                    # replacing the ".txt" or ".pdf" extension with ".mp3"
-                    output_file = file.replace(".txt", ".mp3").replace(".pdf", ".mp3")
+                base_name = os.path.splitext(os.path.basename(file))[0]
+                output_file = os.path.join(output_dir, base_name + ".wav")
 
-                    # Save the cleaned text as an audio file in MP3 format
-                    speaker.save_to_file(clean_text, output_file)
+                speaker.save_to_file(clean_text, output_file)
+                speaker.runAndWait()
 
-                    # Run the speech synthesis engine to convert text to audio
-                    speaker.runAndWait()
-
-                    # Log successful conversion using self.logger
-                    self.logger.add_event("info", "File converted successfully", f"Output file: {output_file}")
-                else:
-                    # Log unsupported file type
-                    self.logger.add_event("alert", "The specified file is not supported and could not be converted.", f"{file}")
+                self.logger.add_event("info", "File converted successfully", f"Output file: {output_file}")
+                self._events.put(("done", file, output_file))
             except Exception as e:
-                # Log the error and continue with the next file
                 error_message = f"Failed to convert file '{file}' to audio: {str(e)}"
                 self.logger.add_event("error", error_message)
+                self._events.put(("error", file, str(e)))

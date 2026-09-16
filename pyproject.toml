@@ -10,6 +10,9 @@ python = "^3.10"
 PyPDF2 = "^3.0.1"
 pyttsx3 = "^2.90"
 ttkbootstrap = "^2.2.3"
+ebooklib = "^0.20"
+beautifulsoup4 = "^4.15.0"
+mobi = "^0.4.1"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
