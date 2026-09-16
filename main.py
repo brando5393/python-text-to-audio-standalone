@@ -16,6 +16,7 @@ from LogManager import LogManager
 from MiniPlayer import MiniPlayer
 from ProgressDialog import ProgressDialog
 from SettingsDrawer import SettingsDrawer
+from UpdateBanner import UpdateBanner
 
 # A warm "coffee house" theme: espresso brown, caramel, and honey accents, with both a
 # latte-cream light mode and a dark-roast dark mode (toggle from the Settings drawer).
@@ -73,6 +74,15 @@ def confirm_quit():
         # Give the exit chime (~0.5s) a moment to actually play before the process ends --
         # destroying the window immediately would cut it off mid-note.
         app.after(500, app.destroy)
+
+
+def quit_for_update():
+    """Closes without the usual confirmation -- the user already explicitly chose
+    "Update Now", so asking "are you sure you want to quit?" right after would be a
+    redundant, confusing second prompt. The installer needs Talebrew closed to safely
+    overwrite its files, so this doesn't play the exit chime or delay for it either."""
+    player.stop()
+    app.destroy()
 
 
 def styled_listbox(parent, **kwargs):
@@ -348,6 +358,8 @@ settings_drawer = SettingsDrawer(
 settings_drawer.pack(fill="both", expand=True)
 apply_text_scale(Config.load()["large_text"])
 
+update_banner = UpdateBanner(app, logger, on_before_install_quit=quit_for_update)
+
 add_files_btn = ttk.Button(controls_frame, text="+ Add Files", command=explorer.add_files, bootstyle="primary")
 del_file_btn = ttk.Button(
     controls_frame, text="− Remove Selected", command=explorer.remove_file, bootstyle="secondary-outline"
@@ -366,6 +378,7 @@ controls_frame.columnconfigure(0, weight=1)
 logger.add_event("info", "Application started successfully")
 SoundEffects.play("ready")
 app.after(300, poll_conversions)
+app.after(2000, update_banner.check_in_background)  # delayed so it never slows down launch
 
 if Config.load()["start_in_mini_mode"]:
     enter_mini_mode(persist=False)  # already persisted from last session; no need to re-save
