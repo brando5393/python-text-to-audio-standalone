@@ -23,6 +23,15 @@ import TextSanitization
 # engine is re-initialized for the next chunk in case the old one is left wedged.
 PYTTSX3_CHUNK_TIMEOUT_SECONDS = 60
 
+# Chunks are synthesized one at a time, deliberately, not concurrently. Running several
+# Piper chunks in parallel was tried and measured -- on this machine, under x64
+# emulation, it was consistently ~30% SLOWER than sequential (two independent timed
+# runs, order reversed to rule out thermal bias: 441.8s vs 299.5s, then 449.4s vs
+# 314.5s), almost certainly because onnxruntime already parallelizes a single chunk's
+# inference across available cores internally, so running multiple Piper processes at
+# once oversubscribes the same cores rather than adding real parallelism. See the
+# "Platform notes" section of the README for the full writeup.
+
 
 class Converter:
     """Converts documents to audio.
