@@ -14,7 +14,7 @@ from cx_Freeze import Executable, setup
 build_exe_options = {
     "packages": ["tkinter", "ttkbootstrap", "PyPDF2", "pyttsx3", "ebooklib", "bs4", "mobi", "loguru"],
     "excludes": ["test", "unittest"],
-    "include_files": [],
+    "include_files": [("assets", "assets")],
 }
 
 bdist_msi_options = {
@@ -35,6 +35,7 @@ setup(
             target_name="TextToAudioConverter.exe",
             shortcut_name="Text to Audio Converter",
             shortcut_dir="DesktopFolder",
+            icon="assets/icon.ico",
         )
     ],
 )

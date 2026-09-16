@@ -1,3 +1,5 @@
+import os
+import sys
 import tkinter as tk
 from tkinter import messagebox
 
@@ -104,6 +106,12 @@ def stop_playback():
 
 # Create the main application window
 app = ttk.Window(title="Text to Audio Converter", themename=THEME, size=(1040, 680), minsize=(900, 620))
+try:
+    # Frozen (cx_Freeze) builds ship assets/ next to the exe; source runs ship it next to main.py.
+    app_dir = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(__file__)
+    app.iconbitmap(os.path.join(app_dir, "assets", "icon.ico"))
+except Exception:
+    pass  # Missing icon shouldn't block the app from starting.
 style = ttk.Style()
 
 # Header

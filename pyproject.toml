@@ -16,6 +16,7 @@ mobi = "^0.4.1"
 
 [tool.poetry.group.dev.dependencies]
 cx-freeze = "^8.7.0"
+pillow = "^12.3.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

@@ -1,61 +1,95 @@
-# Python Text to Audio Converter
+<p align="center"><img src="assets/logo.png" width="140" alt="Text to Audio Converter logo"></p>
+
+# Text to Audio Converter
+
+A Windows desktop app that converts text, PDF, and ebook files into audio, using either
+your system's built-in voice or a natural-sounding offline neural voice ([Piper](https://github.com/rhasspy/piper)).
 
 ## About this Project
-This is a desktop app that converts text, PDF, and ebook files to audio using offline text-to-speech. It started as a fork of [TiffinTech](https://github.com/TiffinTech)'s [python-pdf-audo](https://github.com/TiffinTech/python-pdf-audo) — a small, unlicensed example script — but has since been rewritten end to end (UI, conversion pipeline, TTS engine, packaging) and lives here as its own standalone, MIT-licensed project rather than a GitHub fork of that repository. See [LICENSE](LICENSE) for terms.
+This started as a fork of [TiffinTech](https://github.com/TiffinTech)'s [python-pdf-audo](https://github.com/TiffinTech/python-pdf-audo) — a small, unlicensed example script — but has since been rewritten end to end (UI, conversion pipeline, TTS engine, packaging) and lives here as its own standalone, MIT-licensed project rather than a GitHub fork of that repository. See [LICENSE](LICENSE) for terms.
 
-The main goals of this project are to:
-- Create a Python program to convert text files to audio for use on any common platform.
-- Design a simple, clean, and intuitive user interface.
-- Demonstrate elements of clean and properly formatted code.
-- Utilize Object-Oriented Programming (OOP) principles.
+## Features
+- **Supported formats**: `.txt`, `.pdf`, `.epub`, and non-DRM `.mobi`/`.azw3`. DRM-locked Kindle store books can't be decrypted by this app (or legally by anyone without the device's Kindle key) — that's a hard limit, not a bug.
+- **Two TTS engines**: your system's voice (SAPI, via `pyttsx3`) works immediately with no setup, or install [Piper](https://github.com/rhasspy/piper) from Settings for a much more natural-sounding offline neural voice — speed and expressiveness are tunable there too.
+- **Conversions library**: converted files are organized under a dedicated `Documents/TextToAudio/Conversions` folder, which you can freely split into your own subfolders (Books, Podcasts, etc.) from the app. A browsable panel shows that whole folder tree without leaving the app.
+- **Built-in playback**: double-click any audio file in the Conversions Library to play it, with play/pause/stop controls, right in the app.
+- **Responsive UI**: conversion runs on a background thread, so the window never freezes while a file is being processed — even a long book.
+- **Logging**: a rotating log file at `~/.texttoaudio/texttoaudio.log`, plus a live, color-coded Activity Log panel in the app.
 
-## System Requirements and Installation
-### System Requirements
-- Python 3.10 or higher
-- Compatible with Windows, macOS, and Linux
-- Dependencies:
-  - `pyttsx3` for text-to-speech conversion
-  - `PyPDF2` for PDF processing
-  - `ttkbootstrap` for the UI theme
+## System Requirements
+- Windows 10/11 (playback and the Piper engine use Windows-specific APIs; see [Platform notes](#platform-notes))
+- Python 3.10 or higher (only needed if running from source — see [Installation](#installation))
 
-### Installation
-1. Install Python 3.10 or higher from [https://www.python.org/downloads/](https://www.python.org/downloads/)
-2. Install dependencies using pip:
+## Installation
+
+### Option A: Windows installer (recommended for most users)
+Build a standalone `.msi` that bundles its own Python — no separate install needed:
 ```
-pip install pyttsx3 PyPDF2 ttkbootstrap
+poetry install
+poetry run python setup.py bdist_msi
 ```
-3. Clone or download this repository:
-```
-git clone https://github.com/brando5393/python-text-to-audio-standalone.git
-```
-4. Navigate to the project directory
-5. Run the program:
-```
-python main.py
-```
+The installer lands in `dist\TextToAudioConverter-<version>-win-arm64.msi` (or `-win-amd64` on an Intel/AMD machine). Run it to install; it adds a desktop shortcut.
+
+### Option B: Run from source
+1. Install Python 3.10+ from [python.org](https://www.python.org/downloads/)
+2. Clone this repository:
+   ```
+   git clone https://github.com/brando5393/python-text-to-audio-standalone.git
+   ```
+3. Install dependencies with [Poetry](https://python-poetry.org/):
+   ```
+   poetry install
+   poetry run python main.py
+   ```
+   Or with plain pip: `pip install PyPDF2 pyttsx3 ttkbootstrap ebooklib beautifulsoup4 mobi` then `python main.py`.
 
 ## Usage
-1. Launch the app with `python main.py`. The UI uses the `ttkbootstrap` "flatly" theme by default — change the `THEME` constant at the top of `main.py` (e.g. to `"darkly"`) for a dark UI.
-2. Click **Add Files** and choose one or more `.txt` or `.pdf` files.
-3. Optionally click **Change Download Folder** to pick where audio output goes.
-4. Click **Convert to Audio** to generate an `.mp3` for each selected file, saved next to the source file.
-5. Check the **Activity Log** panel (and `~/texttoaudiopy.log`) for conversion status and errors.
+1. Launch the app. **Add Files** to queue `.txt`/`.pdf`/`.epub`/`.mobi`/`.azw3` files for conversion.
+2. Use **New Folder** to create a named subfolder under Conversions (e.g. "Books") and make it the active save destination, or **Change Save Folder** to pick any other folder.
+3. Click **Convert to Audio**. Conversion runs in the background — keep using the app while it works.
+4. Browse the **Conversions Library** panel for everything you've converted; double-click a file to play it with the **Playback** controls.
+5. Open **Voice Settings** to install the Piper engine, download a voice, and tune speed/expressiveness. Without Piper installed, conversion automatically falls back to your system voice.
+
+The UI uses a custom "coffee house" theme (espresso, caramel, honey-gold on a latte-cream ground) defined in `main.py`. Swap the `THEME` constant there for a built-in ttkbootstrap theme name (e.g. `"darkly"`) if you'd prefer something else.
+
+## Platform notes
+This app targets **Windows**, and specifically was built and tested on **Windows on ARM64**, which has much thinner PyPI wheel coverage than x64 Windows. Two design decisions follow directly from that:
+- **Playback** (`AudioPlayer.py`) uses Windows' built-in MCI API via `ctypes` rather than a package like `pygame`, which publishes no Windows-ARM64 wheel at all.
+- **Piper** (`PiperEngine.py`) is driven as a subprocess against its self-contained Windows x64 binary (running under Windows 11's built-in x64 emulation on ARM64) rather than via the `piper-tts` pip package, whose native `piper-phonemize` dependency also has no win-arm64 wheel.
+- **Audio output is WAV**, not MP3 — MP3 playback via MCI depends on Windows Media Player being installed, which it isn't by default on Windows 11.
+
+Porting to macOS/Linux would mean swapping `AudioPlayer.py` for a cross-platform library (e.g. `sounddevice`) and using Piper's Linux/macOS binaries directly (no emulation needed there).
 
 ## For Developers
-- To set up a development environment with Poetry:
+- Set up a development environment:
   ```
   poetry install
   poetry run python main.py
   ```
-- Contributions are welcome! Please fork this repository, make your changes, and submit a pull request.
-- For any major changes, please open an issue first to discuss the proposed changes.
+- Regenerate the app icon after changing `scripts/generate_icon.py`:
+  ```
+  poetry run python scripts/generate_icon.py
+  ```
+- Contributions are welcome! Fork this repository, make your changes, and submit a pull request. For any major changes, please open an issue first to discuss the proposed changes.
+
+## Architecture
+| Module | Responsibility |
+|---|---|
+| `main.py` | UI layout and wiring |
+| `TextExtraction.py` | Pulls plain text out of txt/pdf/epub/mobi/azw3 |
+| `Converter.py` | Runs conversion on a background thread, dispatches to the active TTS engine |
+| `PiperEngine.py` | Installs/runs the Piper neural TTS engine |
+| `Config.py` | Persists voice/engine settings to `~/.texttoaudio/config.json` |
+| `SettingsDialog.py` | In-app UI for engine/voice/tuning |
+| `FileManager.py` | File picking, Conversions folder management |
+| `ConversionsLibrary.py` | Treeview browser over the Conversions folder |
+| `AudioPlayer.py` | Playback controls via Windows MCI |
+| `LogManager.py` | Rotating file log + live on-screen log feed |
 
 ## Roadmap / Next Steps
-- **Threaded conversion**: `convert_to_audio` currently blocks the UI thread while pyttsx3 renders audio; move it to a background thread (or `after()` polling) so the window stays responsive on large files.
-- **Progress feedback**: add a progress bar or per-file status in the file list while a batch conversion runs.
-- **Configurable voice/rate**: expose pyttsx3's voice and speech-rate options in the UI instead of hardcoding defaults.
-- **Tests**: there's no automated test coverage yet; a few unit tests around `Converter` and `FileManager` (mocking `pyttsx3`/file dialogs) would catch regressions like the PyPDF2 API break that was fixed here.
-- **Migrate PyPDF2 → pypdf**: PyPDF2 is now archived upstream in favor of `pypdf`; consider switching before PyPDF2 stops receiving updates.
-- **Dark mode toggle**: expose the `darkly`/`flatly` theme switch as an in-app button instead of a code constant.
-- **Repo hygiene**: enable Issues on the GitHub repo and turn on "delete branch on merge".
-
+- **Cross-platform playback/TTS**: see [Platform notes](#platform-notes) — the Windows-specific pieces would need swapping out for macOS/Linux support.
+- **Progress feedback**: add a progress bar or per-file status in the file list while a batch conversion runs (the background worker already reports per-file completion; the UI doesn't surface it yet beyond the log).
+- **Tests**: there's no automated test coverage yet.
+- **Migrate PyPDF2 → pypdf**: PyPDF2 is archived upstream in favor of `pypdf`.
+- **Bundle a default Piper voice** in the installer so natural speech works out of the box, trading a larger installer for zero post-install setup.
+- **Repo hygiene**: consider archiving the old `python-text-to-audio` fork on GitHub now that this standalone repo is the active one.
