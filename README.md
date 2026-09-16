@@ -2,6 +2,10 @@
 
 # Talebrew
 
+[![Tests](https://github.com/brando5393/python-text-to-audio-standalone/actions/workflows/tests.yml/badge.svg)](https://github.com/brando5393/python-text-to-audio-standalone/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](pyproject.toml)
+
 *Every story, brewed aloud.*
 
 A Windows desktop app that converts text, PDF, and ebook files into audio, using either
@@ -11,8 +15,8 @@ your system's built-in voice or a natural-sounding offline neural voice ([Piper]
 This started as a fork of [TiffinTech](https://github.com/TiffinTech)'s [python-pdf-audo](https://github.com/TiffinTech/python-pdf-audo) — a small, unlicensed example script — but has since been rewritten end to end (UI, conversion pipeline, TTS engine, packaging) and lives here as its own standalone, MIT-licensed project rather than a GitHub fork of that repository. See [LICENSE](LICENSE) for terms.
 
 ## Features
-- **Supported formats**: `.txt`, `.pdf`, `.epub`, and non-DRM `.mobi`/`.azw3`. DRM-locked Kindle store books can't be decrypted by this app (or legally by anyone without the device's Kindle key) — that's a hard limit, not a bug.
-- **Two TTS engines**: your system's voice (SAPI, via `pyttsx3`) works immediately with no setup, or install [Piper](https://github.com/rhasspy/piper) from the Settings drawer for a much more natural-sounding offline neural voice, with several voices to choose from (Amy, Ryan, Lessac, Alan) — speed and expressiveness are tunable there too.
+- **Supported formats**: `.txt`, `.md`, `.pdf`, `.epub`, non-DRM `.mobi`/`.azw3`, `.docx`, `.rtf`, and `.html`/`.htm`. DRM-locked Kindle store books can't be decrypted by this app (or legally by anyone without the device's Kindle key) — that's a hard limit, not a bug.
+- **Two TTS engines, 30+ voices**: your system's voice (SAPI, via `pyttsx3`) works immediately with no setup, or install [Piper](https://github.com/rhasspy/piper) from the Settings drawer for a much more natural-sounding offline neural voice. Over 30 curated Piper voices are available to download individually, spanning English (US and UK, many speakers) plus Spanish, French, German, Italian, Portuguese, Dutch, Russian, and Chinese — speed and expressiveness are tunable too, and voices you no longer want can be deleted from Settings to free up space.
 - **Settings drawer**: a docked side panel (not a popup) for voice/engine settings and app preferences (save location, light/dark appearance) — open it, change things, keep working.
 - **Conversions library**: converted files are organized under a dedicated `Documents/TextToAudio/Conversions` folder, which you can freely split into your own subfolders (Books, Podcasts, etc.) from the app. A browsable panel shows that whole folder tree without leaving the app.
 - **Built-in playback**: double-click any audio file in the Conversions Library to play it, with play/pause/stop controls, right in the app.
@@ -45,7 +49,7 @@ The installer lands in `dist\Talebrew-<version>-win-arm64.msi` (or `-win-amd64` 
    poetry install
    poetry run python main.py
    ```
-   Or with plain pip: `pip install PyPDF2 pyttsx3 ttkbootstrap ebooklib beautifulsoup4 mobi` then `python main.py`.
+   Or with plain pip: `pip install PyPDF2 pyttsx3 ttkbootstrap ebooklib beautifulsoup4 mobi python-docx striprtf packaging` then `python main.py`.
 
 ## Usage
 1. Launch the app. **Add Files** to queue `.txt`/`.pdf`/`.epub`/`.mobi`/`.azw3` files for conversion.
@@ -66,6 +70,9 @@ This app targets **Windows**, and specifically was built and tested on **Windows
 
 Porting to macOS/Linux would mean swapping `AudioPlayer.py` for a cross-platform library (e.g. `sounddevice`) and using Piper's Linux/macOS binaries directly (no emulation needed there, and full novels would convert in reasonable time even with Piper).
 
+## Auto-updates
+`AppUpdater.py` checks this repo's GitHub Releases for a newer `.msi` on startup and can download and launch it. It is **not** a fully silent updater: installing still touches Program Files, so Windows still shows one UAC prompt, the same as the original install — there's no way around that without a background service running as a privileged user, which is a much bigger tradeoff than an occasional prompt. A downloaded installer is verified against the SHA-256 checksum GitHub computes for the release asset itself before it's ever run, so a corrupted or tampered-with download is rejected rather than launched; this isn't a substitute for code signing (the binaries aren't signed), only a guarantee that the bytes on disk match what GitHub actually served. Network failures (offline, GitHub down, no releases published yet) fail silently — a background version check should never interrupt using the app.
+
 ## For Developers
 - Set up a development environment:
   ```
@@ -76,17 +83,24 @@ Porting to macOS/Linux would mean swapping `AudioPlayer.py` for a cross-platform
   ```
   poetry run python scripts/generate_icon.py
   ```
-- Contributions are welcome! Fork this repository, make your changes, and submit a pull request. For any major changes, please open an issue first to discuss the proposed changes.
+- Run the test suite:
+  ```
+  poetry run pytest tests/ -v
+  ```
+  CI (`.github/workflows/tests.yml`) runs the same suite on Windows against Python 3.10 and 3.12 on every push/PR to `main`.
+- Contributions are welcome! Fork this repository, make your changes, and submit a pull request. For any major changes, please open an issue first to discuss the proposed changes. Please add or update tests and this README alongside any behavior change.
 
 ## Architecture
 | Module | Responsibility |
 |---|---|
 | `main.py` | UI layout and wiring |
-| `TextExtraction.py` | Pulls plain text out of txt/pdf/epub/mobi/azw3 |
+| `TextExtraction.py` | Pulls plain text out of txt/md/pdf/epub/mobi/azw3/docx/rtf/html |
 | `Converter.py` | Runs conversion on a background thread, chunked (see `TextChunking.py`) and dispatched to the active TTS engine; per-chunk timeouts and a top-level crash guard keep one bad section (or an unexpected error) from hanging the whole batch |
 | `TextChunking.py` | Splits long text into sentence-bounded chunks so long documents synthesize incrementally instead of in one long call |
 | `ProgressDialog.py` | Per-file and overall progress bars with an ETA, fed by `Converter`'s event queue |
-| `PiperEngine.py` | Installs/runs the Piper neural TTS engine |
+| `PiperEngine.py` | Installs/runs the Piper neural TTS engine, manages the curated voice catalog |
+| `AppUpdater.py` | Checks GitHub Releases for a newer version, verifies and launches the installer |
+| `version.py` | Single source of truth for the app version (read by `setup.py` and `AppUpdater.py`) |
 | `Config.py` | Persists voice/engine settings to `~/.texttoaudio/config.json` |
 | `SettingsDrawer.py` | Docked side panel for voice/engine tuning and app preferences (save folder, appearance) |
 | `FileManager.py` | File picking, Conversions folder management |
@@ -97,8 +111,7 @@ Porting to macOS/Linux would mean swapping `AudioPlayer.py` for a cross-platform
 ## Roadmap / Next Steps
 - **Native ARM64 Piper inference**: replace the emulated `piper.exe` subprocess with a pure-Python pipeline — `onnxruntime` (which does publish a native win-arm64 wheel) running Piper's ONNX voice model directly, paired with a phonemizer that doesn't require `piper-phonemize`'s unavailable native extension. Would remove the ~2-hour-per-novel ceiling described in [Platform notes](#platform-notes) entirely, since the actual bottleneck is emulated ONNX inference, not process startup.
 - **Cross-platform playback/TTS**: see [Platform notes](#platform-notes) — the Windows-specific pieces would need swapping out for macOS/Linux support.
-- **Progress feedback**: `Converter` already emits a per-chunk progress event as a file converts; the UI doesn't surface it yet beyond periodic log lines — a progress bar next to the file in the list would be the natural next step.
-- **Tests**: there's no automated test coverage yet.
 - **Migrate PyPDF2 → pypdf**: PyPDF2 is archived upstream in favor of `pypdf`.
 - **Bundle a default Piper voice** in the installer so natural speech works out of the box, trading a larger installer for zero post-install setup.
+- **Wire AppUpdater into the UI**: the module exists and is tested, but nothing in `main.py` calls it yet — an in-app banner ("Update available") with an "Update Now" button is the natural next step.
 - **Repo hygiene**: consider archiving the old `python-text-to-audio` fork on GitHub now that this standalone repo is the active one.

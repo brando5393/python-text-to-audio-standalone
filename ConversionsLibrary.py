@@ -36,16 +36,14 @@ class ConversionsLibrary:
             return
         for entry in entries:
             if entry.is_dir():
-                node = self.tree.insert(
-                    parent_id, "end", text=entry.name, image=self._folder_icon, values=(entry.path, "dir")
-                )
+                kwargs = {"image": self._folder_icon} if self._folder_icon is not None else {}
+                node = self.tree.insert(parent_id, "end", text=entry.name, values=(entry.path, "dir"), **kwargs)
                 self._insert_dir(node, entry.path)
             elif not entry.name.endswith(".partial"):
                 # A ".partial" file is a conversion still in progress (see Converter.py);
                 # hide it so a mid-conversion refresh can't be mistaken for a finished file.
-                self.tree.insert(
-                    parent_id, "end", text=entry.name, image=self._audio_icon, values=(entry.path, "file")
-                )
+                kwargs = {"image": self._audio_icon} if self._audio_icon is not None else {}
+                self.tree.insert(parent_id, "end", text=entry.name, values=(entry.path, "file"), **kwargs)
 
     def path_for(self, item_id):
         """Returns (path, kind) for a tree item, where kind is 'dir' or 'file'."""

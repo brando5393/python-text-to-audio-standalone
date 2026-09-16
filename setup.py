@@ -11,6 +11,8 @@ extra download.
 
 from cx_Freeze import Executable, setup
 
+from version import __version__
+
 build_exe_options = {
     "packages": ["tkinter", "ttkbootstrap", "PyPDF2", "pyttsx3", "ebooklib", "bs4", "mobi", "loguru"],
     "excludes": ["test", "unittest"],
@@ -25,7 +27,7 @@ bdist_msi_options = {
 
 setup(
     name="Talebrew",
-    version="0.1.0",
+    version=__version__,
     description="Every story, brewed aloud -- converts text, PDF, and ebook files to audio using offline text-to-speech.",
     options={"build_exe": build_exe_options, "bdist_msi": bdist_msi_options},
     executables=[
