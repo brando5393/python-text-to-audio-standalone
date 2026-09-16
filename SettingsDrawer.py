@@ -170,6 +170,14 @@ class SettingsDrawer(ttk.Frame):
         self.download_progress = ttk.Progressbar(frame, mode="determinate", maximum=100)
         self.download_progress.pack(fill="x", pady=(8, 0))
 
+        ttk.Label(
+            frame,
+            text='Tip: "low" quality voices synthesize much faster than "high" ones (roughly '
+            "5x faster, measured) -- worth trying for long documents if speed matters more than "
+            "how natural the voice sounds.",
+            bootstyle="secondary", wraplength=220,
+        ).pack(anchor="w", pady=(8, 0))
+
     def _refresh_voice_list(self):
         voices = PiperEngine.list_installed_voices()
         self.voice_menu.configure(values=voices)
