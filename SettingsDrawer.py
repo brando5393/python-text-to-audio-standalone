@@ -87,7 +87,7 @@ class SettingsDrawer(ttk.Frame):
     def _build_header(self, on_close):
         row = ttk.Frame(self)
         row.pack(fill="x")
-        ttk.Label(row, text="Settings", font=("Georgia", 13, "bold")).pack(side="left")
+        ttk.Label(row, text="Settings", font=("Palatino Linotype", 14, "bold")).pack(side="left")
         ttk.Button(row, text="Close", command=on_close, bootstyle="secondary-outline").pack(side="right")
 
     # -- Voice tab -----------------------------------------------------------------

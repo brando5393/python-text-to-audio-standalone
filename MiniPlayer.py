@@ -20,7 +20,7 @@ class MiniPlayer(ttk.Toplevel):
         frame = ttk.Frame(self, padding=12)
         frame.pack(fill="both", expand=True)
 
-        ttk.Label(frame, text="Talebrew", font=("Georgia", 12, "bold")).pack(anchor="w")
+        ttk.Label(frame, text="Talebrew", font=("Palatino Linotype", 13, "bold")).pack(anchor="w")
         now_playing_label = ttk.Label(frame, textvariable=now_playing_var, wraplength=270, bootstyle="secondary")
         now_playing_label.pack(anchor="w", fill="x", pady=(4, 10))
 

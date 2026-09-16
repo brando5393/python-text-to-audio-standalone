@@ -110,6 +110,7 @@ def set_dark_mode(dark):
     style.theme_use("coffeehouse-dark" if dark else "coffeehouse-light")
     restyle_listbox(file_list_display)
     restyle_listbox(app_log_display)
+    apply_background(dark)
 
 
 BASE_NAMED_FONT_SIZES = {"TkDefaultFont": 9, "TkTextFont": 9, "TkHeadingFont": 10, "TkMenuFont": 9}
@@ -127,7 +128,7 @@ def apply_text_scale(large):
             tkfont.nametofont(name).configure(size=base_size + delta)
         except tk.TclError:
             pass
-    title_label.configure(font=("Georgia", 20 + delta, "bold"))
+    title_label.configure(font=("Palatino Linotype", 21 + delta, "bold"))
     app_log_display.configure(font=("Consolas", 9 + delta))
 
 
@@ -214,10 +215,32 @@ except Exception:
     pass  # Missing icon shouldn't block the app from starting.
 style = ttk.Style()
 
+# Subtle background texture (faint paper grain + a large, barely-visible watermark of the
+# app's own icon) -- created first so it naturally sits behind every other widget in the
+# stacking order. It only shows through the margins/gaps between panels, since the panels
+# themselves paint their own themed background over it -- by design, not a limitation:
+# that keeps it from ever showing behind text or competing with real content.
+background_photo = None
+
+
+def apply_background(dark):
+    global background_photo
+    filename = "background-dark.png" if dark else "background-light.png"
+    try:
+        background_photo = tk.PhotoImage(file=os.path.join(app_dir, "assets", filename))
+        background_label.configure(image=background_photo, background=style.colors.bg)
+    except (tk.TclError, NameError):
+        pass  # Missing/unloadable texture is cosmetic only -- never block the app.
+
+
+background_label = tk.Label(app, borderwidth=0, highlightthickness=0)
+background_label.place(x=0, y=0, relwidth=1, relheight=1)
+apply_background(dark=False)
+
 # Header
 header_block = ttk.Frame(app)
 header_block.grid(row=0, column=0, columnspan=3, sticky="w", padx=20, pady=(16, 10))
-title_label = ttk.Label(header_block, text="Talebrew", font=("Georgia", 20, "bold"))
+title_label = ttk.Label(header_block, text="Talebrew", font=("Palatino Linotype", 21, "bold"))
 title_label.pack(anchor="w")
 ttk.Label(header_block, text="Every story, brewed aloud.", bootstyle="secondary").pack(anchor="w")
 
