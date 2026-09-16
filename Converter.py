@@ -4,7 +4,9 @@ import threading
 
 import pyttsx3
 
+import Config
 import LogManager as logger
+import PiperEngine
 import TextExtraction
 
 
@@ -36,7 +38,13 @@ class Converter:
         return events
 
     def _convert_worker(self, files, output_dir):
-        speaker = pyttsx3.init()
+        settings = Config.load()
+        use_piper = (
+            settings["engine"] == "piper"
+            and PiperEngine.is_engine_installed()
+            and PiperEngine.is_voice_installed(settings["voice"])
+        )
+        pyttsx3_speaker = None if use_piper else pyttsx3.init()
         os.makedirs(output_dir, exist_ok=True)
 
         for file in files:
@@ -54,10 +62,22 @@ class Converter:
                 base_name = os.path.splitext(os.path.basename(file))[0]
                 output_file = os.path.join(output_dir, base_name + ".wav")
 
-                speaker.save_to_file(clean_text, output_file)
-                speaker.runAndWait()
+                if use_piper:
+                    # length_scale is inverse of speed: 2x speed -> half the length_scale.
+                    PiperEngine.synthesize(
+                        clean_text,
+                        settings["voice"],
+                        output_file,
+                        length_scale=1.0 / max(settings["speed"], 0.1),
+                        noise_scale=settings["expressiveness"],
+                    )
+                    engine_used = f"Piper ({settings['voice']})"
+                else:
+                    pyttsx3_speaker.save_to_file(clean_text, output_file)
+                    pyttsx3_speaker.runAndWait()
+                    engine_used = "system voice (pyttsx3)"
 
-                self.logger.add_event("info", "File converted successfully", f"Output file: {output_file}")
+                self.logger.add_event("info", "File converted successfully", f"{engine_used} -> {output_file}")
                 self._events.put(("done", file, output_file))
             except Exception as e:
                 error_message = f"Failed to convert file '{file}' to audio: {str(e)}"

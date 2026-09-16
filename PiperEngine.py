@@ -1,0 +1,98 @@
+import json
+import os
+import subprocess
+import urllib.request
+import zipfile
+
+APP_DATA_DIR = os.path.join(os.path.expanduser("~"), ".texttoaudio")
+ENGINE_DIR = os.path.join(APP_DATA_DIR, "engine", "piper")
+VOICES_DIR = os.path.join(APP_DATA_DIR, "voices")
+PIPER_EXE = os.path.join(ENGINE_DIR, "piper", "piper.exe")
+
+PIPER_RELEASE_URL = "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip"
+
+# A small curated set of natural-sounding English voices from the Piper voice pack.
+# (Runs under Windows' built-in x64 emulation on ARM64 -- Piper ships no native
+# win-arm64 build, but the amd64 build works fine through emulation.)
+CURATED_VOICES = {
+    "Amy (US, medium)": "en/en_US/amy/medium/en_US-amy-medium",
+    "Lessac (US, medium)": "en/en_US/lessac/medium/en_US-lessac-medium",
+    "Ryan (US, high)": "en/en_US/ryan/high/en_US-ryan-high",
+    "Alan (UK, medium)": "en/en_GB/alan/medium/en_GB-alan-medium",
+}
+HF_BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/main"
+
+
+def is_engine_installed():
+    return os.path.isfile(PIPER_EXE)
+
+
+def install_engine(progress_cb=None):
+    """Downloads and extracts the Piper CLI engine. `progress_cb(fraction)` is optional."""
+    os.makedirs(ENGINE_DIR, exist_ok=True)
+    zip_path = os.path.join(ENGINE_DIR, "piper.zip")
+    _download(PIPER_RELEASE_URL, zip_path, progress_cb)
+    with zipfile.ZipFile(zip_path) as zf:
+        zf.extractall(ENGINE_DIR)
+    os.remove(zip_path)
+    if not is_engine_installed():
+        raise RuntimeError("Piper engine extracted but piper.exe was not found where expected")
+
+
+def list_installed_voices():
+    if not os.path.isdir(VOICES_DIR):
+        return []
+    return sorted(f[:-5] for f in os.listdir(VOICES_DIR) if f.endswith(".onnx"))
+
+
+def is_voice_installed(voice_id):
+    return os.path.isfile(os.path.join(VOICES_DIR, voice_id + ".onnx"))
+
+
+def download_voice(voice_key, progress_cb=None):
+    """`voice_key` is one of CURATED_VOICES' values, e.g. 'en/en_US/amy/medium/en_US-amy-medium'."""
+    os.makedirs(VOICES_DIR, exist_ok=True)
+    voice_id = os.path.basename(voice_key)
+    onnx_path = os.path.join(VOICES_DIR, voice_id + ".onnx")
+    json_path = os.path.join(VOICES_DIR, voice_id + ".onnx.json")
+    _download(f"{HF_BASE}/{voice_key}.onnx", onnx_path, progress_cb)
+    _download(f"{HF_BASE}/{voice_key}.onnx.json", json_path, None)
+    return voice_id
+
+
+def _download(url, dest_path, progress_cb):
+    def _reporthook(block_num, block_size, total_size):
+        if progress_cb and total_size > 0:
+            progress_cb(min(1.0, (block_num * block_size) / total_size))
+
+    tmp_path = dest_path + ".part"
+    urllib.request.urlretrieve(url, tmp_path, _reporthook)
+    os.replace(tmp_path, dest_path)
+
+
+def synthesize(text, voice_id, output_wav_path, length_scale=1.0, noise_scale=0.667, noise_w=0.8):
+    """Synthesizes `text` to `output_wav_path` using an installed Piper voice.
+
+    length_scale: speaking rate (1.0 normal, >1 slower, <1 faster).
+    noise_scale / noise_w: Piper's naturalness/variation controls ("expressiveness").
+    """
+    model_path = os.path.join(VOICES_DIR, voice_id + ".onnx")
+    if not is_engine_installed():
+        raise RuntimeError("Piper engine is not installed yet (see Settings > Voice)")
+    if not os.path.isfile(model_path):
+        raise RuntimeError(f"Voice '{voice_id}' is not downloaded yet (see Settings > Voice)")
+
+    command = [
+        PIPER_EXE,
+        "--model", model_path,
+        "--output_file", output_wav_path,
+        "--length_scale", str(length_scale),
+        "--noise_scale", str(noise_scale),
+        "--noise_w", str(noise_w),
+    ]
+    result = subprocess.run(
+        command, input=text, capture_output=True, text=True, encoding="utf-8",
+        creationflags=subprocess.CREATE_NO_WINDOW,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"Piper failed (exit {result.returncode}): {result.stderr.strip()[:500]}")

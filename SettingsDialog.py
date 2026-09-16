@@ -1,0 +1,172 @@
+import queue
+import threading
+import tkinter as tk
+
+import ttkbootstrap as ttk
+
+import Config
+import PiperEngine
+
+
+class SettingsDialog(ttk.Toplevel):
+    """Lets the user pick the TTS engine/voice and tune speed & expressiveness."""
+
+    def __init__(self, parent, logger):
+        super().__init__(parent)
+        self.title("Voice Settings")
+        self.geometry("460x420")
+        self.resizable(False, False)
+        self.logger = logger
+        self.settings = Config.load()
+        self._download_events = queue.Queue()
+
+        self.engine_var = tk.StringVar(value=self.settings["engine"])
+        self.voice_var = tk.StringVar(value=self.settings["voice"])
+        self.speed_var = tk.DoubleVar(value=self.settings["speed"])
+        self.expr_var = tk.DoubleVar(value=self.settings["expressiveness"])
+
+        self._build_engine_section()
+        self._build_voice_section()
+        self._build_tuning_section()
+        self._build_footer()
+        self._refresh_voice_list()
+
+        self.after(200, self._poll_downloads)
+
+    def _build_engine_section(self):
+        frame = ttk.Labelframe(self, text="Engine", padding=10, bootstyle="primary")
+        frame.pack(fill="x", padx=12, pady=(12, 6))
+        ttk.Radiobutton(
+            frame, text="Piper (natural, offline neural voice)", variable=self.engine_var, value="piper"
+        ).pack(anchor="w")
+        ttk.Radiobutton(
+            frame, text="System voice (pyttsx3 / Windows SAPI, always available)",
+            variable=self.engine_var, value="pyttsx3",
+        ).pack(anchor="w")
+
+        self.engine_status = ttk.Label(frame, bootstyle="secondary")
+        self.engine_status.pack(anchor="w", pady=(6, 0))
+        self.install_engine_btn = ttk.Button(
+            frame, text="Install Piper Engine", command=self._install_engine, bootstyle="info-outline"
+        )
+        self._update_engine_status()
+
+    def _update_engine_status(self):
+        if PiperEngine.is_engine_installed():
+            self.engine_status.configure(text="Piper engine: installed")
+            self.install_engine_btn.pack_forget()
+        else:
+            self.engine_status.configure(text="Piper engine: not installed yet (~21 MB download)")
+            self.install_engine_btn.pack(anchor="w", pady=(4, 0))
+
+    def _install_engine(self):
+        self.install_engine_btn.configure(state="disabled", text="Installing...")
+
+        def work():
+            try:
+                PiperEngine.install_engine()
+                self._download_events.put(("engine_done", None))
+            except Exception as e:
+                self._download_events.put(("engine_error", str(e)))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _build_voice_section(self):
+        frame = ttk.Labelframe(self, text="Voice", padding=10, bootstyle="primary")
+        frame.pack(fill="x", padx=12, pady=6)
+
+        row = ttk.Frame(frame)
+        row.pack(fill="x")
+        ttk.Label(row, text="Active voice:").pack(side="left")
+        self.voice_menu = ttk.Combobox(row, textvariable=self.voice_var, state="readonly", width=24)
+        self.voice_menu.pack(side="left", padx=(6, 0))
+
+        row2 = ttk.Frame(frame)
+        row2.pack(fill="x", pady=(8, 0))
+        ttk.Label(row2, text="Download:").pack(side="left")
+        self.download_choice = ttk.Combobox(
+            row2, values=list(PiperEngine.CURATED_VOICES.keys()), state="readonly", width=20
+        )
+        self.download_choice.pack(side="left", padx=(6, 6))
+        self.download_btn = ttk.Button(row2, text="Download", command=self._download_voice, bootstyle="info-outline")
+        self.download_btn.pack(side="left")
+
+        self.download_progress = ttk.Progressbar(frame, mode="determinate", maximum=100)
+        self.download_progress.pack(fill="x", pady=(8, 0))
+
+    def _refresh_voice_list(self):
+        voices = PiperEngine.list_installed_voices()
+        self.voice_menu.configure(values=voices)
+        if self.voice_var.get() not in voices and voices:
+            self.voice_var.set(voices[0])
+
+    def _download_voice(self):
+        label = self.download_choice.get()
+        if not label:
+            return
+        voice_key = PiperEngine.CURATED_VOICES[label]
+        self.download_btn.configure(state="disabled")
+
+        def work():
+            try:
+                voice_id = PiperEngine.download_voice(
+                    voice_key, lambda frac: self._download_events.put(("progress", frac))
+                )
+                self._download_events.put(("voice_done", voice_id))
+            except Exception as e:
+                self._download_events.put(("voice_error", str(e)))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _poll_downloads(self):
+        try:
+            while True:
+                kind, payload = self._download_events.get_nowait()
+                if kind == "progress":
+                    self.download_progress["value"] = payload * 100
+                elif kind == "voice_done":
+                    self.download_progress["value"] = 100
+                    self.download_btn.configure(state="normal")
+                    self._refresh_voice_list()
+                    self.voice_var.set(payload)
+                    self.logger.add_event("info", f"Downloaded voice: {payload}")
+                elif kind == "voice_error":
+                    self.download_btn.configure(state="normal")
+                    self.logger.add_event("error", "Failed to download voice", payload)
+                elif kind == "engine_done":
+                    self._update_engine_status()
+                    self.logger.add_event("info", "Piper engine installed")
+                elif kind == "engine_error":
+                    self.install_engine_btn.configure(state="normal", text="Install Piper Engine")
+                    self.logger.add_event("error", "Failed to install Piper engine", payload)
+        except queue.Empty:
+            pass
+        self.after(200, self._poll_downloads)
+
+    def _build_tuning_section(self):
+        frame = ttk.Labelframe(self, text="Tuning (Piper voices)", padding=10, bootstyle="primary")
+        frame.pack(fill="x", padx=12, pady=6)
+
+        ttk.Label(frame, text="Speed").pack(anchor="w")
+        ttk.Scale(frame, variable=self.speed_var, from_=0.5, to=2.0, orient="horizontal").pack(fill="x")
+
+        ttk.Label(frame, text="Expressiveness").pack(anchor="w", pady=(8, 0))
+        ttk.Scale(frame, variable=self.expr_var, from_=0.3, to=1.0, orient="horizontal").pack(fill="x")
+
+    def _build_footer(self):
+        row = ttk.Frame(self, padding=12)
+        row.pack(fill="x", side="bottom")
+        ttk.Button(row, text="Save", command=self._save, bootstyle="success").pack(side="right")
+        ttk.Button(row, text="Cancel", command=self.destroy, bootstyle="secondary-outline").pack(
+            side="right", padx=(0, 8)
+        )
+
+    def _save(self):
+        Config.save({
+            "engine": self.engine_var.get(),
+            "voice": self.voice_var.get(),
+            "speed": round(self.speed_var.get(), 2),
+            "expressiveness": round(self.expr_var.get(), 2),
+        })
+        self.logger.add_event("info", "Voice settings saved")
+        self.destroy()

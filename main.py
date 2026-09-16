@@ -8,6 +8,7 @@ import FileManager
 from AudioPlayer import AudioPlayer
 from ConversionsLibrary import ConversionsLibrary
 from LogManager import LogManager
+from SettingsDialog import SettingsDialog
 
 # Swap "flatly" for "darkly" (or any other ttkbootstrap theme name) for a dark UI.
 THEME = "flatly"
@@ -42,6 +43,10 @@ def styled_listbox(parent, **kwargs):
 
 def refresh_library():
     library.refresh()
+
+
+def open_settings():
+    SettingsDialog(app, logger)
 
 
 def do_convert():
@@ -192,11 +197,13 @@ del_all_btn = ttk.Button(
     controls_frame, text="Remove All", command=explorer.clear_files, bootstyle="secondary-outline"
 )
 convert_btn = ttk.Button(controls_frame, text="Convert to Audio", bootstyle="success", command=do_convert)
+settings_btn = ttk.Button(controls_frame, text="Voice Settings...", command=open_settings, bootstyle="secondary-outline")
 
 add_files_btn.grid(row=0, column=0, sticky="ew", pady=(0, 6))
 del_file_btn.grid(row=1, column=0, sticky="ew", pady=(0, 6))
 del_all_btn.grid(row=2, column=0, sticky="ew", pady=(0, 18))
 convert_btn.grid(row=3, column=0, sticky="ew", ipady=4)
+settings_btn.grid(row=4, column=0, sticky="ew", pady=(6, 0))
 controls_frame.columnconfigure(0, weight=1)
 
 logger.add_event("info", "Application started successfully")
