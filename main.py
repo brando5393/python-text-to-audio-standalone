@@ -10,8 +10,20 @@ from ConversionsLibrary import ConversionsLibrary
 from LogManager import LogManager
 from SettingsDialog import SettingsDialog
 
-# Swap "flatly" for "darkly" (or any other ttkbootstrap theme name) for a dark UI.
-THEME = "flatly"
+# A warm "coffee house" theme: espresso brown, caramel, and honey accents on a latte-cream
+# ground. Swap THEME for a built-in ttkbootstrap name (e.g. "darkly") to use that instead.
+ttk.Theme(
+    name="coffeehouse",
+    primary="#6f4e37",     # espresso brown
+    secondary="#8a7968",   # warm taupe
+    success="#a97142",     # caramel
+    info="#5f7a61",        # sage / matcha
+    warning="#c9932f",     # honey gold
+    danger="#a3402c",      # brick / dried cherry
+    neutral="#8a7968",
+    light={"background": "#f2e8d9", "foreground": "#3b2a1e"},
+).register()
+THEME = "coffeehouse-light"
 
 player = AudioPlayer()
 
@@ -95,7 +107,7 @@ app = ttk.Window(title="Text to Audio Converter", themename=THEME, size=(1040, 6
 style = ttk.Style()
 
 # Header
-header = ttk.Label(app, text="Text to Audio Converter", font=("Segoe UI", 18, "bold"))
+header = ttk.Label(app, text="Text to Audio Converter", font=("Georgia", 19, "bold"))
 header.grid(row=0, column=0, columnspan=3, sticky="w", padx=20, pady=(18, 10))
 
 # Files section
