@@ -259,6 +259,12 @@ AppIcon.claim_taskbar_identity()
 
 # Create the main application window
 app = ttk.Window(title="Talebrew — Every story, brewed aloud.", themename=THEME, size=(1040, 680), minsize=(900, 620))
+# Withdrawn immediately and only shown again once the icon is set (near the end of this
+# file, right before mainloop): Windows' taskbar button caches whatever icon the window
+# had the moment it first became visible, so setting the icon after a frame has already
+# been shown with Tk's default "feather" icon leaves the taskbar stuck on that default
+# even though the title bar updates correctly.
+app.withdraw()
 AppIcon.apply(app)
 app_dir = AppIcon.APP_DIR
 style = ttk.Style()
@@ -324,7 +330,7 @@ refresh_library_btn = ttk.Button(library_frame, text="↻ Refresh", command=refr
 refresh_library_btn.grid(row=1, column=0, sticky="ew", pady=(8, 0))
 
 reconvert_btn = ttk.Button(
-    library_frame, text="🔁 Re-convert with Current Voice", command=reconvert_selected, bootstyle="secondary-outline"
+    library_frame, text="🔁 Re-convert Voice", command=reconvert_selected, bootstyle="secondary-outline"
 )
 reconvert_btn.grid(row=2, column=0, sticky="ew", pady=(6, 0))
 
@@ -425,5 +431,7 @@ app.after(2000, update_banner.check_in_background)  # delayed so it never slows 
 
 if Config.load()["start_in_mini_mode"]:
     enter_mini_mode(persist=False)  # already persisted from last session; no need to re-save
+else:
+    app.deiconify()  # first time the main window is shown -- see the withdraw() note above
 
 app.mainloop()
