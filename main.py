@@ -1,10 +1,12 @@
 import os
 import sys
 import tkinter as tk
+import tkinter.font as tkfont
 from tkinter import messagebox
 
 import ttkbootstrap as ttk
 
+import Config
 import Converter
 import FileManager
 from AudioPlayer import AudioPlayer
@@ -79,6 +81,25 @@ def set_dark_mode(dark):
     restyle_listbox(app_log_display)
 
 
+BASE_NAMED_FONT_SIZES = {"TkDefaultFont": 9, "TkTextFont": 9, "TkHeadingFont": 10, "TkMenuFont": 9}
+LARGE_TEXT_DELTA = 4
+
+
+def apply_text_scale(large):
+    """Scales UI text app-wide. Adjusting Tk's own named fonts (TkDefaultFont etc.) covers
+    every ttk widget that doesn't set an explicit font (buttons, labels, the Settings
+    drawer, comboboxes, ...); the handful of widgets with an explicit font (the header,
+    and the monospace log) are resized separately since they don't follow the named fonts."""
+    delta = LARGE_TEXT_DELTA if large else 0
+    for name, base_size in BASE_NAMED_FONT_SIZES.items():
+        try:
+            tkfont.nametofont(name).configure(size=base_size + delta)
+        except tk.TclError:
+            pass
+    title_label.configure(font=("Georgia", 20 + delta, "bold"))
+    app_log_display.configure(font=("Consolas", 9 + delta))
+
+
 def toggle_settings_drawer():
     if drawer_wrapper.winfo_ismapped():
         drawer_wrapper.grid_remove()
@@ -150,7 +171,8 @@ style = ttk.Style()
 # Header
 header_block = ttk.Frame(app)
 header_block.grid(row=0, column=0, columnspan=3, sticky="w", padx=20, pady=(16, 10))
-ttk.Label(header_block, text="Talebrew", font=("Georgia", 20, "bold")).pack(anchor="w")
+title_label = ttk.Label(header_block, text="Talebrew", font=("Georgia", 20, "bold"))
+title_label.pack(anchor="w")
 ttk.Label(header_block, text="Every story, brewed aloud.", bootstyle="secondary").pack(anchor="w")
 
 settings_toggle_btn = ttk.Button(app, text="⚙ Settings", command=toggle_settings_drawer, bootstyle="secondary-outline")
@@ -247,9 +269,11 @@ converter = Converter.Converter(app_log_display)
 
 settings_drawer = SettingsDrawer(
     drawer_wrapper, logger, explorer,
-    on_theme_change=set_dark_mode, on_close=toggle_settings_drawer, dark_mode=False,
+    on_theme_change=set_dark_mode, on_text_scale_change=apply_text_scale,
+    on_close=toggle_settings_drawer, dark_mode=False,
 )
 settings_drawer.pack(fill="both", expand=True)
+apply_text_scale(Config.load()["large_text"])
 
 add_files_btn = ttk.Button(controls_frame, text="+ Add Files", command=explorer.add_files, bootstyle="primary")
 del_file_btn = ttk.Button(

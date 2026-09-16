@@ -17,11 +17,12 @@ class SettingsDrawer(ttk.Frame):
     since a drawer you can leave open while you work reads as "live", not "pending".
     """
 
-    def __init__(self, parent, logger, explorer, on_theme_change, on_close, dark_mode):
+    def __init__(self, parent, logger, explorer, on_theme_change, on_text_scale_change, on_close, dark_mode):
         super().__init__(parent, padding=12)
         self.logger = logger
         self.explorer = explorer
         self.on_theme_change = on_theme_change
+        self.on_text_scale_change = on_text_scale_change
         self.settings = Config.load()
         self._download_events = queue.Queue()
         self._loading = True  # suppresses auto-save while initial values are being set
@@ -30,6 +31,7 @@ class SettingsDrawer(ttk.Frame):
         self.voice_var = tk.StringVar(value=self.settings["voice"])
         self.speed_var = tk.DoubleVar(value=self.settings["speed"])
         self.expr_var = tk.DoubleVar(value=self.settings["expressiveness"])
+        self.large_text_var = tk.BooleanVar(value=self.settings["large_text"])
         self.appearance_var = tk.StringVar(value="dark" if dark_mode else "light")
 
         self._build_header(on_close)
@@ -38,18 +40,21 @@ class SettingsDrawer(ttk.Frame):
         notebook.pack(fill="both", expand=True, pady=(10, 0))
         voice_tab = ttk.Frame(notebook, padding=10)
         app_tab = ttk.Frame(notebook, padding=10)
+        accessibility_tab = ttk.Frame(notebook, padding=10)
         notebook.add(voice_tab, text="Voice")
         notebook.add(app_tab, text="App")
+        notebook.add(accessibility_tab, text="Accessibility")
 
         self._build_engine_section(voice_tab)
         self._build_voice_section(voice_tab)
         self._build_tuning_section(voice_tab)
         self._build_app_section(app_tab)
+        self._build_accessibility_section(accessibility_tab)
 
         self._refresh_voice_list()
         self._loading = False
 
-        for var in (self.engine_var, self.voice_var, self.speed_var, self.expr_var):
+        for var in (self.engine_var, self.voice_var, self.speed_var, self.expr_var, self.large_text_var):
             var.trace_add("write", lambda *_args: self._save())
 
         self.after(200, self._poll_downloads)
@@ -70,6 +75,7 @@ class SettingsDrawer(ttk.Frame):
         self.voice_var.set(settings["voice"])
         self.speed_var.set(settings["speed"])
         self.expr_var.set(settings["expressiveness"])
+        self.large_text_var.set(settings["large_text"])
         self._update_engine_status()
         self._loading = False
 
@@ -227,7 +233,9 @@ class SettingsDrawer(ttk.Frame):
             "voice": self.voice_var.get(),
             "speed": round(self.speed_var.get(), 2),
             "expressiveness": round(self.expr_var.get(), 2),
+            "large_text": self.large_text_var.get(),
         })
+        self.on_text_scale_change(self.large_text_var.get())
 
     # -- App tab ---------------------------------------------------------------------
 
@@ -282,7 +290,7 @@ class SettingsDrawer(ttk.Frame):
     def _reset_voice_settings(self):
         if messagebox.askyesno("Reset Voice Settings", "Reset engine, voice, speed, and expressiveness to defaults?"):
             self._loading = True
-            Config.save(dict(Config.DEFAULTS))
+            Config.save({**Config.DEFAULTS, "large_text": self.large_text_var.get()})
             self.engine_var.set(Config.DEFAULTS["engine"])
             self._refresh_voice_list()
             self.voice_var.set(Config.DEFAULTS["voice"])
@@ -299,7 +307,7 @@ class SettingsDrawer(ttk.Frame):
     def _reset_everything(self):
         if messagebox.askyesno(
             "Reset Everything",
-            "Reset save folder, voice settings, and appearance all back to their defaults?",
+            "Reset save folder, voice settings, appearance, and accessibility options all back to their defaults?",
         ):
             self.explorer.reset_download_directory()
             self._loading = True
@@ -309,6 +317,8 @@ class SettingsDrawer(ttk.Frame):
             self.voice_var.set(Config.DEFAULTS["voice"])
             self.speed_var.set(Config.DEFAULTS["speed"])
             self.expr_var.set(Config.DEFAULTS["expressiveness"])
+            self.large_text_var.set(Config.DEFAULTS["large_text"])
+            self.on_text_scale_change(Config.DEFAULTS["large_text"])
             self._loading = False
             self.appearance_var.set("light")
             self._apply_appearance()
@@ -316,3 +326,41 @@ class SettingsDrawer(ttk.Frame):
 
     def _apply_appearance(self):
         self.on_theme_change(self.appearance_var.get() == "dark")
+
+    # -- Accessibility tab -------------------------------------------------------------
+
+    def _build_accessibility_section(self, parent):
+        text_frame = ttk.Labelframe(parent, text="Readability", padding=10, bootstyle="primary")
+        text_frame.pack(fill="x")
+        ttk.Checkbutton(
+            text_frame, text="Larger text throughout the app", variable=self.large_text_var, bootstyle="round-toggle"
+        ).pack(anchor="w")
+
+        statement_frame = ttk.Labelframe(parent, text="Accessibility Statement", padding=10, bootstyle="primary")
+        statement_frame.pack(fill="both", expand=True, pady=(10, 0))
+        statement = tk.Text(statement_frame, wrap="word", height=14, borderwidth=0, highlightthickness=0)
+        statement.insert("1.0", ACCESSIBILITY_STATEMENT)
+        statement.configure(state="disabled")
+        statement.pack(fill="both", expand=True)
+
+
+ACCESSIBILITY_STATEMENT = """Talebrew aims to be usable with a keyboard alone and to keep text \
+readable at a glance. Here's what's actually been verified, and what isn't there yet -- rather \
+than a blanket claim either way.
+
+Verified:
+- Every control (buttons, dropdowns, sliders) can be reached and operated with Tab / Shift+Tab \
+and Enter/Space, and file/folder lists respond to arrow keys once focused.
+- Text and background colors meet WCAG AA contrast (4.5:1) in both the light and dark themes; \
+this was measured directly, not assumed, and one accent color that fell short (2.25:1) was \
+darkened until it passed.
+- Status is never color-only: log entries always carry a text label (INFO/WARNING/ERROR) \
+alongside their color.
+- The "Larger text" toggle above scales UI text app-wide, and speech rate is independently \
+adjustable in the Voice tab.
+
+Known limitation:
+- Talebrew is built with Tkinter, which has limited support for Windows screen readers (Narrator, \
+NVDA, JAWS) compared to native Windows apps -- Tkinter doesn't fully implement the accessibility \
+APIs those tools rely on. If you use a screen reader and hit rough edges, please open an issue; \
+this is a real gap, not a solved problem."""

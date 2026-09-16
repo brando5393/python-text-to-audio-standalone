@@ -8,9 +8,22 @@ def test_load_returns_defaults_when_no_file_exists(tmp_path, monkeypatch):
 
 def test_save_then_load_round_trips(tmp_path, monkeypatch):
     monkeypatch.setattr(Config, "CONFIG_PATH", str(tmp_path / "config.json"))
-    settings = {"engine": "piper", "voice": "en_US-ryan-high", "speed": 1.5, "expressiveness": 0.8}
+    settings = {
+        "engine": "piper", "voice": "en_US-ryan-high", "speed": 1.5, "expressiveness": 0.8, "large_text": True,
+    }
     Config.save(settings)
     assert Config.load() == settings
+
+
+def test_save_requires_every_default_key(tmp_path, monkeypatch):
+    """Config.save() writes exactly the DEFAULTS keys -- a caller that omits one (as an
+    earlier version of SettingsDrawer's _save() did when large_text was added to DEFAULTS
+    without updating it) should fail loudly rather than silently drop a setting."""
+    import pytest
+    monkeypatch.setattr(Config, "CONFIG_PATH", str(tmp_path / "config.json"))
+    incomplete = {"engine": "piper", "voice": "en_US-amy-medium", "speed": 1.0}
+    with pytest.raises(KeyError):
+        Config.save(incomplete)
 
 
 def test_load_ignores_corrupt_file(tmp_path, monkeypatch):

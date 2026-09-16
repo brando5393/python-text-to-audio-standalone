@@ -8,6 +8,7 @@ DEFAULTS = {
     "voice": "en_US-amy-medium",
     "speed": 1.0,  # 0.5 (slower) .. 2.0 (faster) -> mapped to Piper's length_scale
     "expressiveness": 0.667,  # Piper's noise_scale: lower = flatter/more consistent, higher = more varied
+    "large_text": False,  # scales up UI text app-wide for readability
 }
 
 
