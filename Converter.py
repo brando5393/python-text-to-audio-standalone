@@ -74,11 +74,24 @@ class Converter:
 
     def _convert_worker_inner(self, files, output_dir):
         settings = Config.load()
-        use_piper = (
-            settings["engine"] == "piper"
-            and PiperEngine.is_engine_installed()
-            and PiperEngine.is_voice_installed(settings["voice"])
-        )
+        engine_installed = PiperEngine.is_engine_installed()
+        voice_installed = PiperEngine.is_voice_installed(settings["voice"])
+        use_piper = settings["engine"] == "piper" and engine_installed and voice_installed
+
+        if settings["engine"] == "piper" and not use_piper:
+            # Piper was the user's actual choice; falling back to the system voice
+            # without saying why would look like the voice selection is being ignored.
+            if not engine_installed:
+                reason = "the Piper engine isn't installed yet"
+            elif not voice_installed:
+                reason = f"the voice '{settings['voice']}' isn't downloaded yet"
+            else:
+                reason = "Piper isn't fully set up yet"
+            self.logger.add_event(
+                "warn", f"Piper is selected but {reason}, using the system voice instead",
+                "Install the engine and download the voice from Settings > Voice",
+            )
+
         if not use_piper:
             self._pyttsx3_speaker = pyttsx3.init()
         engine_label = f"Piper ({settings['voice']})" if use_piper else "system voice (pyttsx3)"

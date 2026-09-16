@@ -111,12 +111,28 @@ class SettingsDrawer(ttk.Frame):
         self._update_engine_status()
 
     def _update_engine_status(self):
-        if PiperEngine.is_engine_installed():
-            self.engine_status.configure(text="Piper engine: installed")
+        engine_installed = PiperEngine.is_engine_installed()
+        voice_installed = PiperEngine.is_voice_installed(self.voice_var.get()) if self.voice_var.get() else False
+
+        if not engine_installed:
+            self.engine_status.configure(
+                text="Piper engine: not installed yet (~21 MB download)", bootstyle="secondary"
+            )
+            self.install_engine_btn.pack(anchor="w", pady=(4, 0))
+        elif not voice_installed:
+            self.engine_status.configure(
+                text="Piper engine installed, but no voice is downloaded yet (see below)", bootstyle="warning"
+            )
+            self.install_engine_btn.pack_forget()
+        elif self.engine_var.get() == "piper":
+            self.engine_status.configure(text=f"Ready: using {self.voice_var.get()}", bootstyle="success")
             self.install_engine_btn.pack_forget()
         else:
-            self.engine_status.configure(text="Piper engine: not installed yet (~21 MB download)")
-            self.install_engine_btn.pack(anchor="w", pady=(4, 0))
+            self.engine_status.configure(
+                text=f"Piper is ready ({self.voice_var.get()}), but System voice is selected above",
+                bootstyle="secondary",
+            )
+            self.install_engine_btn.pack_forget()
 
     def _install_engine(self):
         self.install_engine_btn.configure(state="disabled", text="Installing...")
@@ -250,6 +266,7 @@ class SettingsDrawer(ttk.Frame):
         })
         Config.save(current)
         self.on_text_scale_change(self.large_text_var.get())
+        self._update_engine_status()
 
     # -- App tab ---------------------------------------------------------------------
 
