@@ -374,25 +374,21 @@ class SettingsDrawer(ttk.Frame):
 
 
 ACCESSIBILITY_STATEMENT = """Talebrew aims to be usable with a keyboard alone and to keep text \
-readable at a glance. Here's what's actually been verified, and what isn't there yet -- rather \
-than a blanket claim either way.
+readable at a glance. Here's what's actually been verified, and what isn't there yet.
 
 Verified:
 - Every control (buttons, dropdowns, sliders) can be reached and operated with Tab / Shift+Tab \
-and Enter/Space, and file/folder lists respond to arrow keys once focused.
-- Text and background colors meet WCAG AA contrast (4.5:1) in both the light and dark themes; \
-this was measured directly, not assumed, and one accent color that fell short (2.25:1) was \
-darkened until it passed.
-- Status is never color-only: log entries always carry a text label (INFO/WARNING/ERROR) \
-alongside their color.
-- The "Larger text" toggle above scales UI text app-wide, and speech rate is independently \
-adjustable in the Voice tab.
-- Sound cues mark app-ready, conversion-done, error, and exit moments audibly, not just \
-visually -- useful if the window isn't in view or isn't the easiest thing to read at a glance. \
-Toggle them off above if you'd rather not have them.
+and Enter/Space, and file and folder lists respond to arrow keys once focused.
+- Text and background colors meet WCAG AA contrast (4.5:1) in both the light and dark themes. \
+This was measured directly: one accent color fell short at 2.25:1 and was darkened until it passed.
+- Status is never color only. Log entries carry a text label (INFO, WARNING, ERROR) alongside \
+their color.
+- The "Larger text" toggle above scales UI text app-wide, and speech rate is adjustable \
+separately in the Voice tab.
+- Sound cues mark app-ready, conversion-done, error, and exit moments audibly, which helps if \
+the window isn't in view. Toggle them off above if you'd rather not have them.
 
 Known limitation:
 - Talebrew is built with Tkinter, which has limited support for Windows screen readers (Narrator, \
-NVDA, JAWS) compared to native Windows apps -- Tkinter doesn't fully implement the accessibility \
-APIs those tools rely on. If you use a screen reader and hit rough edges, please open an issue; \
-this is a real gap, not a solved problem."""
+NVDA, JAWS) compared to native Windows apps: it doesn't fully implement the accessibility APIs \
+those tools rely on. If you use a screen reader and hit rough edges, please open an issue."""

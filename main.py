@@ -293,7 +293,7 @@ controls_frame.grid(row=1, column=2, sticky="new", padx=8, pady=8)
 player_frame = ttk.Labelframe(app, text="Playback", padding=10, bootstyle="secondary")
 player_frame.grid(row=2, column=2, sticky="new", padx=8, pady=(0, 8))
 
-now_playing_var = tk.StringVar(value="Nothing playing — double-click a file in the Conversions Library")
+now_playing_var = tk.StringVar(value="Nothing playing. Double-click a file in the Conversions Library.")
 now_playing_label = ttk.Label(player_frame, textvariable=now_playing_var, wraplength=180, bootstyle="secondary")
 now_playing_label.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
 
