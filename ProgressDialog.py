@@ -3,6 +3,8 @@ import tkinter as tk
 
 import ttkbootstrap as ttk
 
+import AppIcon
+
 
 def _format_eta(seconds):
     if seconds is None or seconds < 0:
@@ -28,6 +30,7 @@ class ProgressDialog(ttk.Toplevel):
         super().__init__(parent)
         self.title("Converting Files")
         self.geometry("520x420")
+        AppIcon.apply(self)
         self.converter = converter
         self.rows = {}  # file path -> row widgets
         self.total_chunks = None

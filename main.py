@@ -7,6 +7,7 @@ from tkinter import messagebox
 
 import ttkbootstrap as ttk
 
+import AppIcon
 import Config
 import Converter
 import FileManager
@@ -253,14 +254,13 @@ def stop_playback():
     now_playing_var.set("Nothing playing")
 
 
+# Must happen before the first window is created (see AppIcon.claim_taskbar_identity).
+AppIcon.claim_taskbar_identity()
+
 # Create the main application window
 app = ttk.Window(title="Talebrew — Every story, brewed aloud.", themename=THEME, size=(1040, 680), minsize=(900, 620))
-try:
-    # Frozen (cx_Freeze) builds ship assets/ next to the exe; source runs ship it next to main.py.
-    app_dir = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(__file__)
-    app.iconbitmap(os.path.join(app_dir, "assets", "icon.ico"))
-except Exception:
-    pass  # Missing icon shouldn't block the app from starting.
+AppIcon.apply(app)
+app_dir = AppIcon.APP_DIR
 style = ttk.Style()
 
 # Subtle background texture (faint paper grain + a large, barely-visible watermark of the

@@ -2,6 +2,8 @@ import tkinter as tk
 
 import ttkbootstrap as ttk
 
+import AppIcon
+
 
 class MiniPlayer(ttk.Toplevel):
     """A small, always-on-top playback-only window -- for keeping Talebrew out of the
@@ -11,6 +13,7 @@ class MiniPlayer(ttk.Toplevel):
         super().__init__(parent)
         self.title("Talebrew Mini Player")
         self.geometry("300x130")
+        AppIcon.apply(self)
         self.resizable(False, False)
         self.attributes("-topmost", True)
         self.player = player
