@@ -32,6 +32,7 @@ class SettingsDrawer(ttk.Frame):
         self.speed_var = tk.DoubleVar(value=self.settings["speed"])
         self.expr_var = tk.DoubleVar(value=self.settings["expressiveness"])
         self.large_text_var = tk.BooleanVar(value=self.settings["large_text"])
+        self.sound_effects_var = tk.BooleanVar(value=self.settings["sound_effects_enabled"])
         self.appearance_var = tk.StringVar(value="dark" if dark_mode else "light")
 
         self._build_header(on_close)
@@ -54,7 +55,10 @@ class SettingsDrawer(ttk.Frame):
         self._refresh_voice_list()
         self._loading = False
 
-        for var in (self.engine_var, self.voice_var, self.speed_var, self.expr_var, self.large_text_var):
+        for var in (
+            self.engine_var, self.voice_var, self.speed_var, self.expr_var,
+            self.large_text_var, self.sound_effects_var,
+        ):
             var.trace_add("write", lambda *_args: self._save())
 
         self.after(200, self._poll_downloads)
@@ -76,6 +80,7 @@ class SettingsDrawer(ttk.Frame):
         self.speed_var.set(settings["speed"])
         self.expr_var.set(settings["expressiveness"])
         self.large_text_var.set(settings["large_text"])
+        self.sound_effects_var.set(settings["sound_effects_enabled"])
         self._update_engine_status()
         self._loading = False
 
@@ -234,6 +239,7 @@ class SettingsDrawer(ttk.Frame):
             "speed": round(self.speed_var.get(), 2),
             "expressiveness": round(self.expr_var.get(), 2),
             "large_text": self.large_text_var.get(),
+            "sound_effects_enabled": self.sound_effects_var.get(),
         })
         self.on_text_scale_change(self.large_text_var.get())
 
@@ -290,7 +296,11 @@ class SettingsDrawer(ttk.Frame):
     def _reset_voice_settings(self):
         if messagebox.askyesno("Reset Voice Settings", "Reset engine, voice, speed, and expressiveness to defaults?"):
             self._loading = True
-            Config.save({**Config.DEFAULTS, "large_text": self.large_text_var.get()})
+            Config.save({
+                **Config.DEFAULTS,
+                "large_text": self.large_text_var.get(),
+                "sound_effects_enabled": self.sound_effects_var.get(),
+            })
             self.engine_var.set(Config.DEFAULTS["engine"])
             self._refresh_voice_list()
             self.voice_var.set(Config.DEFAULTS["voice"])
@@ -319,6 +329,7 @@ class SettingsDrawer(ttk.Frame):
             self.expr_var.set(Config.DEFAULTS["expressiveness"])
             self.large_text_var.set(Config.DEFAULTS["large_text"])
             self.on_text_scale_change(Config.DEFAULTS["large_text"])
+            self.sound_effects_var.set(Config.DEFAULTS["sound_effects_enabled"])
             self._loading = False
             self.appearance_var.set("light")
             self._apply_appearance()
@@ -334,6 +345,13 @@ class SettingsDrawer(ttk.Frame):
         text_frame.pack(fill="x")
         ttk.Checkbutton(
             text_frame, text="Larger text throughout the app", variable=self.large_text_var, bootstyle="round-toggle"
+        ).pack(anchor="w")
+
+        sound_frame = ttk.Labelframe(parent, text="Sound Cues", padding=10, bootstyle="primary")
+        sound_frame.pack(fill="x", pady=(10, 0))
+        ttk.Checkbutton(
+            sound_frame, text="Play a sound for app ready / conversion done / errors / exit",
+            variable=self.sound_effects_var, bootstyle="round-toggle",
         ).pack(anchor="w")
 
         statement_frame = ttk.Labelframe(parent, text="Accessibility Statement", padding=10, bootstyle="primary")
@@ -358,6 +376,9 @@ darkened until it passed.
 alongside their color.
 - The "Larger text" toggle above scales UI text app-wide, and speech rate is independently \
 adjustable in the Voice tab.
+- Sound cues mark app-ready, conversion-done, error, and exit moments audibly, not just \
+visually -- useful if the window isn't in view or isn't the easiest thing to read at a glance. \
+Toggle them off above if you'd rather not have them.
 
 Known limitation:
 - Talebrew is built with Tkinter, which has limited support for Windows screen readers (Narrator, \

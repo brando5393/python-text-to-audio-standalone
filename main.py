@@ -9,6 +9,7 @@ import ttkbootstrap as ttk
 import Config
 import Converter
 import FileManager
+import SoundEffects
 from AudioPlayer import AudioPlayer
 from ConversionsLibrary import ConversionsLibrary
 from LogManager import LogManager
@@ -35,13 +36,18 @@ THEME = "coffeehouse-light"
 
 player = AudioPlayer()
 progress_dialog = None
+batch_had_error = False
+batch_had_done = False
 
 
 def confirm_quit():
     """Exits the app cleanly after yes/no prompt"""
     if messagebox.askyesno(title="Close Application", message="Are you sure you want to quit?"):
         player.stop()
-        app.destroy()
+        SoundEffects.play("exit", blocking=False)
+        # Give the exit chime (~0.5s) a moment to actually play before the process ends --
+        # destroying the window immediately would cut it off mid-note.
+        app.after(500, app.destroy)
 
 
 def styled_listbox(parent, **kwargs):
@@ -123,12 +129,27 @@ def do_convert():
 
 
 def poll_conversions():
+    global batch_had_error, batch_had_done
     events = converter.poll_events()
     if events:
         if any(event[0] in ("done", "error") for event in events):
             refresh_library()
         if progress_dialog is not None and progress_dialog.winfo_exists():
             progress_dialog.handle_events(events)
+        for event in events:
+            if event[0] == "plan":
+                batch_had_error = False  # a new batch is starting
+                batch_had_done = False
+            elif event[0] == "error":
+                batch_had_error = True
+            elif event[0] == "done":
+                batch_had_done = True
+            elif event[0] == "all_done":
+                if batch_had_error:
+                    SoundEffects.play("error")
+                elif batch_had_done:
+                    SoundEffects.play("conversion_done")
+                # else: everything in the batch was skipped -- nothing worth chiming for.
     app.after(300, poll_conversions)
 
 
@@ -291,6 +312,7 @@ convert_btn.grid(row=3, column=0, sticky="ew", ipady=4)
 controls_frame.columnconfigure(0, weight=1)
 
 logger.add_event("info", "Application started successfully")
+SoundEffects.play("ready")
 app.after(300, poll_conversions)
 
 app.mainloop()
