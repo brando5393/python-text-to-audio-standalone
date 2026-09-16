@@ -1,3 +1,4 @@
+import json
 import os
 
 import ttkbootstrap as ttk
@@ -62,6 +63,79 @@ def test_creates_root_dir_if_missing(tk_root, tmp_path):
     tree = ttk.Treeview(tk_root, show="tree")
     ConversionsLibrary(tree, missing_dir)
     assert os.path.isdir(missing_dir)
+
+
+def test_voice_column_reads_sidecar_metadata(tk_root, tmp_path):
+    (tmp_path / "chapter.wav").write_bytes(b"data")
+    (tmp_path / "chapter.wav.json").write_text(
+        json.dumps({"engine": "piper", "voice_id": "en_US-ryan-high", "voice_label": "Ryan (US, high)", "text": "hi"})
+    )
+
+    tree = ttk.Treeview(tk_root, show="tree")
+    lib = ConversionsLibrary(tree, str(tmp_path))
+
+    for item in tree.get_children(""):
+        if tree.item(item, "text") == "chapter.wav":
+            assert tree.item(item, "values")[0] == "Ryan (US, high)"
+
+
+def test_sidecar_json_files_are_not_listed_as_entries(tk_root, tmp_path):
+    (tmp_path / "chapter.wav").write_bytes(b"data")
+    (tmp_path / "chapter.wav.json").write_text(json.dumps({"text": "hi"}))
+
+    tree = ttk.Treeview(tk_root, show="tree")
+    lib = ConversionsLibrary(tree, str(tmp_path))
+
+    texts = [tree.item(i, "text") for i in tree.get_children("")]
+    assert "chapter.wav" in texts
+    assert "chapter.wav.json" not in texts
+
+
+def test_files_without_sidecar_show_blank_voice(tk_root, tmp_path):
+    (tmp_path / "old_file.wav").write_bytes(b"data")
+
+    tree = ttk.Treeview(tk_root, show="tree")
+    lib = ConversionsLibrary(tree, str(tmp_path))
+
+    for item in tree.get_children(""):
+        if tree.item(item, "text") == "old_file.wav":
+            assert tree.item(item, "values")[0] == ""
+
+
+def test_text_for_reads_stored_source_text(tk_root, tmp_path):
+    (tmp_path / "chapter.wav").write_bytes(b"data")
+    (tmp_path / "chapter.wav.json").write_text(
+        json.dumps({"engine": "piper", "voice_id": "en_US-ryan-high", "voice_label": "Ryan (US, high)", "text": "Hello world"})
+    )
+
+    tree = ttk.Treeview(tk_root, show="tree")
+    lib = ConversionsLibrary(tree, str(tmp_path))
+
+    for item in tree.get_children(""):
+        if tree.item(item, "text") == "chapter.wav":
+            assert lib.text_for(item) == "Hello world"
+
+
+def test_text_for_returns_none_without_sidecar(tk_root, tmp_path):
+    (tmp_path / "old_file.wav").write_bytes(b"data")
+
+    tree = ttk.Treeview(tk_root, show="tree")
+    lib = ConversionsLibrary(tree, str(tmp_path))
+
+    for item in tree.get_children(""):
+        if tree.item(item, "text") == "old_file.wav":
+            assert lib.text_for(item) is None
+
+
+def test_text_for_returns_none_for_folders(tk_root, tmp_path):
+    os.makedirs(tmp_path / "Books")
+
+    tree = ttk.Treeview(tk_root, show="tree")
+    lib = ConversionsLibrary(tree, str(tmp_path))
+
+    for item in tree.get_children(""):
+        if tree.item(item, "text") == "Books":
+            assert lib.text_for(item) is None
 
 
 def test_survives_when_icons_fail_to_load(tk_root, tmp_path):

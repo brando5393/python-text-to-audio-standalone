@@ -1,3 +1,4 @@
+import json
 import os
 import queue
 import shutil
@@ -114,7 +115,7 @@ class Converter:
                 chunks = TextChunking.split_into_chunks(clean_text)
                 base_name = os.path.splitext(os.path.basename(file))[0]
                 output_file = os.path.join(output_dir, base_name + ".wav")
-                plan.append({"file": file, "chunks": chunks, "output_file": output_file})
+                plan.append({"file": file, "chunks": chunks, "output_file": output_file, "text": clean_text})
             except Exception as e:
                 error_message = f"Failed to read '{file}': {str(e)}"
                 self.logger.add_event("error", error_message)
@@ -132,7 +133,7 @@ class Converter:
                 continue
             try:
                 global_done = self._convert_one(
-                    item["file"], item["chunks"], item["output_file"],
+                    item["file"], item["chunks"], item["output_file"], item["text"],
                     use_piper, settings, engine_label, global_done, total_chunks, start_time,
                 )
             except Exception as e:
@@ -140,7 +141,7 @@ class Converter:
                 self.logger.add_event("error", error_message)
                 self._events.put(("error", item["file"], str(e)))
 
-    def _convert_one(self, file, chunks, output_file, use_piper, settings, engine_label, global_done, total_chunks, start_time):
+    def _convert_one(self, file, chunks, output_file, text, use_piper, settings, engine_label, global_done, total_chunks, start_time):
         total = len(chunks)
         tmp_dir = tempfile.mkdtemp(prefix="tta_")
         chunk_paths = []
@@ -180,6 +181,7 @@ class Converter:
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
         self.logger.add_event("info", "File converted successfully", f"{engine_label} -> {output_file}")
+        _write_sidecar(output_file, text, use_piper, settings)
         self._events.put(("done", file, output_file))
         return global_done
 
@@ -215,6 +217,28 @@ class Converter:
             raise TimeoutError(f"System voice did not finish this section within {PYTTSX3_CHUNK_TIMEOUT_SECONDS}s")
         if error_box:
             raise error_box[0]
+
+
+def _write_sidecar(output_file, text, use_piper, settings):
+    """Stores the voice used and the exact text synthesized alongside the audio file.
+
+    This is what lets the Conversions Library show which voice made a file, and lets a
+    file be re-synthesized in a different voice later without needing the original
+    document again -- otherwise a converted file is permanently locked to whatever voice
+    was selected the moment it was made, defeating the point of being able to change voices.
+    """
+    voice_label = PiperEngine.FRIENDLY_NAMES.get(settings["voice"], settings["voice"]) if use_piper else "System voice"
+    sidecar = {
+        "engine": "piper" if use_piper else "pyttsx3",
+        "voice_id": settings["voice"] if use_piper else None,
+        "voice_label": voice_label,
+        "text": text,
+    }
+    try:
+        with open(output_file + ".json", "w", encoding="utf-8") as f:
+            json.dump(sidecar, f)
+    except OSError:
+        pass  # Metadata is a display/re-convert convenience, not required for the audio itself.
 
 
 def _concatenate_wavs(chunk_paths, output_path):

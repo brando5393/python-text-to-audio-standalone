@@ -1,5 +1,6 @@
 import os
 import sys
+import tempfile
 import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import messagebox
@@ -203,6 +204,43 @@ def play_selected_audio(_event=None):
         logger.add_event("error", "Failed to play audio file", str(e))
 
 
+def reconvert_selected():
+    """Re-synthesizes a previously converted file using whatever voice is selected now.
+
+    Converted audio is otherwise permanently locked to the voice active at the moment
+    it was made, which defeats the point of being able to change voices -- someone who
+    switches to a new voice would have to track down and re-add every original document
+    to hear their existing library in it. The source text used for each conversion is
+    kept in a sidecar file precisely so this can work without the original document.
+    """
+    selection = library_tree.selection()
+    if not selection:
+        logger.add_event("warn", "No file selected to re-convert")
+        return
+    path, kind = library.path_for(selection[0])
+    if kind != "file":
+        logger.add_event("warn", "Select an audio file, not a folder, to re-convert")
+        return
+    text = library.text_for(selection[0])
+    if not text:
+        logger.add_event(
+            "warn", "No stored text for this file, it can't be re-converted",
+            "It was likely converted before this feature existed -- convert the original document again instead",
+        )
+        return
+
+    global progress_dialog
+    output_dir = os.path.dirname(path)
+    base_name = os.path.splitext(os.path.basename(path))[0]
+    tmp_dir = tempfile.mkdtemp(prefix="tta_reconvert_")
+    text_path = os.path.join(tmp_dir, base_name + ".txt")
+    with open(text_path, "w", encoding="utf-8") as f:
+        f.write(text)
+
+    progress_dialog = ProgressDialog(app, converter, 1)
+    converter.convert_to_audio([text_path], output_dir)
+
+
 def toggle_pause():
     if player.is_playing():
         player.pause()
@@ -273,7 +311,7 @@ files_frame.columnconfigure(0, weight=1)
 library_frame = ttk.Labelframe(app, text="Conversions Library", padding=10, bootstyle="primary")
 library_frame.grid(row=1, column=1, sticky="nsew", padx=8, pady=8)
 
-library_tree = ttk.Treeview(library_frame, show="tree", height=14, bootstyle="primary")
+library_tree = ttk.Treeview(library_frame, height=14, bootstyle="primary")
 library_scroll = ttk.Scrollbar(library_frame, orient="vertical", command=library_tree.yview, bootstyle="round")
 library_tree.configure(yscrollcommand=library_scroll.set)
 library_tree.grid(row=0, column=0, sticky="nsew")
@@ -284,6 +322,11 @@ library_frame.columnconfigure(0, weight=1)
 
 refresh_library_btn = ttk.Button(library_frame, text="↻ Refresh", command=refresh_library, bootstyle="secondary-outline")
 refresh_library_btn.grid(row=1, column=0, sticky="ew", pady=(8, 0))
+
+reconvert_btn = ttk.Button(
+    library_frame, text="🔁 Re-convert with Current Voice", command=reconvert_selected, bootstyle="secondary-outline"
+)
+reconvert_btn.grid(row=2, column=0, sticky="ew", pady=(6, 0))
 
 # Actions section
 controls_frame = ttk.Labelframe(app, text="Actions", padding=10, bootstyle="primary")

@@ -52,6 +52,11 @@ CURATED_VOICES = {
 }
 HF_BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/main"
 
+# Reverse lookup from a voice id (e.g. "en_US-ryan-high") back to its friendly display
+# name (e.g. "Ryan (US, high)"), used by the Conversions Library to label files without
+# showing users the raw model id.
+FRIENDLY_NAMES = {os.path.basename(path): name for name, path in CURATED_VOICES.items()}
+
 
 def is_engine_installed():
     return os.path.isfile(PIPER_EXE)
