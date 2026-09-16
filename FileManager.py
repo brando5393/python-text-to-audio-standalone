@@ -107,6 +107,19 @@ class FileManager:
                 self.logger.add_event("warn", "Folder name was empty after removing invalid characters")
                 return
             new_dir = os.path.join(CONVERSIONS_ROOT, safe_name)
+
+            # Stripping separators above blocks multi-segment traversal (e.g. "../../x"
+            # collapses to a literal, harmless folder name once its slashes are gone), but
+            # a name of exactly ".." survives that filter intact and resolves to the
+            # parent of Conversions -- confirmed by testing, not just reasoning about it.
+            # A real containment check catches that and any other resolution trick, rather
+            # than trying to keep enumerating individual bad strings.
+            root_real = os.path.realpath(CONVERSIONS_ROOT)
+            new_dir_real = os.path.realpath(new_dir)
+            if os.path.commonpath([root_real, new_dir_real]) != root_real:
+                self.logger.add_event("warn", "Folder name would escape the Conversions folder", name)
+                return
+
             os.makedirs(new_dir, exist_ok=True)
             self.download_directory = new_dir
             self._refresh_directory_label()

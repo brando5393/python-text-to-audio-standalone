@@ -37,6 +37,22 @@ def test_create_subfolder_sanitizes_invalid_characters(tk_root, tmp_path, monkey
     assert os.path.basename(manager.download_directory) == "BadName"
 
 
+def test_create_subfolder_rejects_parent_directory_traversal(tk_root, tmp_path, monkeypatch):
+    """Security regression test: stripping '/' and '\\' blocks multi-segment traversal
+    like "../../x" (its slashes vanish, leaving a literal, harmless folder name), but a
+    name of exactly ".." has no separator to strip and survives intact, resolving to the
+    parent of Conversions -- confirmed by testing before this was fixed with a real
+    containment check (os.path.commonpath), not just a denylist for ".."."""
+    manager, _ = _make_manager(tk_root, tmp_path, monkeypatch)
+    original_dir = manager.download_directory
+    monkeypatch.setattr("FileManager.simpledialog.askstring", lambda *a, **k: "..")
+    manager.create_subfolder()
+    assert manager.download_directory == original_dir
+    assert os.path.normpath(manager.download_directory).startswith(
+        os.path.normpath(FileManager.CONVERSIONS_ROOT)
+    )
+
+
 def test_set_download_directory_asks_for_confirmation(tk_root, tmp_path, monkeypatch):
     manager, changes = _make_manager(tk_root, tmp_path, monkeypatch)
     other_dir = str(tmp_path / "Elsewhere")
