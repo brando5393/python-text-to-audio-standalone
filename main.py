@@ -11,10 +11,10 @@ from AudioPlayer import AudioPlayer
 from ConversionsLibrary import ConversionsLibrary
 from LogManager import LogManager
 from ProgressDialog import ProgressDialog
-from SettingsDialog import SettingsDialog
+from SettingsDrawer import SettingsDrawer
 
-# A warm "coffee house" theme: espresso brown, caramel, and honey accents on a latte-cream
-# ground. Swap THEME for a built-in ttkbootstrap name (e.g. "darkly") to use that instead.
+# A warm "coffee house" theme: espresso brown, caramel, and honey accents, with both a
+# latte-cream light mode and a dark-roast dark mode (toggle from the Settings drawer).
 ttk.Theme(
     name="coffeehouse",
     primary="#6f4e37",     # espresso brown
@@ -25,6 +25,7 @@ ttk.Theme(
     danger="#a3402c",      # brick / dried cherry
     neutral="#8a7968",
     light={"background": "#f2e8d9", "foreground": "#3b2a1e"},
+    dark={"background": "#241b14", "foreground": "#f2e8d9"},
 ).register()
 THEME = "coffeehouse-light"
 
@@ -57,12 +58,34 @@ def styled_listbox(parent, **kwargs):
     )
 
 
+def restyle_listbox(widget):
+    """Re-applies the current theme's colors to a Listbox after a light/dark switch."""
+    colors = style.colors
+    widget.configure(
+        highlightbackground=colors.border,
+        highlightcolor=colors.primary,
+        background=colors.inputbg,
+        foreground=colors.inputfg,
+        selectbackground=colors.primary,
+        selectforeground=colors.selectfg,
+    )
+
+
+def set_dark_mode(dark):
+    style.theme_use("coffeehouse-dark" if dark else "coffeehouse-light")
+    restyle_listbox(file_list_display)
+    restyle_listbox(app_log_display)
+
+
+def toggle_settings_drawer():
+    if drawer_wrapper.winfo_ismapped():
+        drawer_wrapper.grid_remove()
+    else:
+        drawer_wrapper.grid()
+
+
 def refresh_library():
     library.refresh()
-
-
-def open_settings():
-    SettingsDialog(app, logger)
 
 
 def do_convert():
@@ -112,7 +135,7 @@ def stop_playback():
 
 
 # Create the main application window
-app = ttk.Window(title="Text to Audio Converter", themename=THEME, size=(1040, 680), minsize=(900, 620))
+app = ttk.Window(title="Talebrew — Every story, brewed aloud.", themename=THEME, size=(1040, 680), minsize=(900, 620))
 try:
     # Frozen (cx_Freeze) builds ship assets/ next to the exe; source runs ship it next to main.py.
     app_dir = os.path.dirname(sys.executable) if getattr(sys, "frozen", False) else os.path.dirname(__file__)
@@ -122,8 +145,13 @@ except Exception:
 style = ttk.Style()
 
 # Header
-header = ttk.Label(app, text="Text to Audio Converter", font=("Georgia", 19, "bold"))
-header.grid(row=0, column=0, columnspan=3, sticky="w", padx=20, pady=(18, 10))
+header_block = ttk.Frame(app)
+header_block.grid(row=0, column=0, columnspan=3, sticky="w", padx=20, pady=(16, 10))
+ttk.Label(header_block, text="Talebrew", font=("Georgia", 20, "bold")).pack(anchor="w")
+ttk.Label(header_block, text="Every story, brewed aloud.", bootstyle="secondary").pack(anchor="w")
+
+settings_toggle_btn = ttk.Button(app, text="Settings", command=toggle_settings_drawer, bootstyle="secondary-outline")
+settings_toggle_btn.grid(row=0, column=3, sticky="e", padx=(0, 20), pady=(18, 10))
 
 # Files section
 files_frame = ttk.Labelframe(app, text="Files to Convert", padding=10, bootstyle="primary")
@@ -155,11 +183,11 @@ refresh_library_btn.grid(row=1, column=0, sticky="ew", pady=(8, 0))
 
 # Actions section
 controls_frame = ttk.Labelframe(app, text="Actions", padding=10, bootstyle="primary")
-controls_frame.grid(row=1, column=2, sticky="new", padx=(8, 20), pady=8)
+controls_frame.grid(row=1, column=2, sticky="new", padx=8, pady=8)
 
 # Player section
 player_frame = ttk.Labelframe(app, text="Playback", padding=10, bootstyle="secondary")
-player_frame.grid(row=2, column=2, sticky="new", padx=(8, 20), pady=(0, 8))
+player_frame.grid(row=2, column=2, sticky="new", padx=8, pady=(0, 8))
 
 now_playing_var = tk.StringVar(value="Nothing playing — double-click a file in the Conversions Library")
 now_playing_label = ttk.Label(player_frame, textvariable=now_playing_var, wraplength=180, bootstyle="secondary")
@@ -172,9 +200,15 @@ stop_playback_btn.grid(row=1, column=1, sticky="ew", padx=(4, 0))
 player_frame.columnconfigure(0, weight=1)
 player_frame.columnconfigure(1, weight=1)
 
+# Settings drawer (docked, hidden until toggled)
+drawer_wrapper = ttk.Frame(app, width=260)
+drawer_wrapper.grid(row=1, column=3, rowspan=2, sticky="nsew", padx=(0, 20), pady=8)
+drawer_wrapper.grid_propagate(False)
+drawer_wrapper.grid_remove()
+
 # Log section
 log_frame = ttk.Labelframe(app, text="Activity Log", padding=10, bootstyle="secondary")
-log_frame.grid(row=3, column=0, columnspan=3, sticky="nsew", padx=20, pady=(8, 8))
+log_frame.grid(row=3, column=0, columnspan=4, sticky="nsew", padx=20, pady=(8, 8))
 
 app_log_display = styled_listbox(log_frame, height=8, font=("Consolas", 9))
 log_scroll = ttk.Scrollbar(log_frame, orient="vertical", command=app_log_display.yview, bootstyle="round")
@@ -186,24 +220,19 @@ log_frame.columnconfigure(0, weight=1)
 
 # Directory + exit bar
 bottom_bar = ttk.Frame(app, padding=(20, 0, 20, 16))
-bottom_bar.grid(row=4, column=0, columnspan=3, sticky="ew")
+bottom_bar.grid(row=4, column=0, columnspan=4, sticky="ew")
 bottom_bar.columnconfigure(0, weight=1)
 
 download_directory_label = ttk.Label(bottom_bar, bootstyle="secondary")
 download_directory_label.grid(row=0, column=0, sticky="w")
 
-new_folder_button = ttk.Button(bottom_bar, text="New Folder", bootstyle="secondary-outline")
-new_folder_button.grid(row=0, column=1, padx=(8, 8))
-
-change_directory_button = ttk.Button(bottom_bar, text="Change Save Folder", bootstyle="secondary-outline")
-change_directory_button.grid(row=0, column=2, padx=(0, 8))
-
 exit_btn = ttk.Button(bottom_bar, text="Exit", command=confirm_quit, bootstyle="danger-outline")
-exit_btn.grid(row=0, column=3)
+exit_btn.grid(row=0, column=1)
 
 app.columnconfigure(0, weight=2)
 app.columnconfigure(1, weight=2)
 app.columnconfigure(2, weight=1)
+app.columnconfigure(3, weight=0)
 app.rowconfigure(1, weight=1)
 app.rowconfigure(3, weight=1)
 
@@ -213,8 +242,11 @@ library = ConversionsLibrary(library_tree, FileManager.CONVERSIONS_ROOT)
 explorer = FileManager.FileManager(file_list_display, app_log_display, download_directory_label, refresh_library)
 converter = Converter.Converter(app_log_display)
 
-change_directory_button.configure(command=explorer.set_download_directory)
-new_folder_button.configure(command=explorer.create_subfolder)
+settings_drawer = SettingsDrawer(
+    drawer_wrapper, logger, explorer,
+    on_theme_change=set_dark_mode, on_close=toggle_settings_drawer, dark_mode=False,
+)
+settings_drawer.pack(fill="both", expand=True)
 
 add_files_btn = ttk.Button(controls_frame, text="Add Files", command=explorer.add_files, bootstyle="primary")
 del_file_btn = ttk.Button(
@@ -224,13 +256,11 @@ del_all_btn = ttk.Button(
     controls_frame, text="Remove All", command=explorer.clear_files, bootstyle="secondary-outline"
 )
 convert_btn = ttk.Button(controls_frame, text="Convert to Audio", bootstyle="success", command=do_convert)
-settings_btn = ttk.Button(controls_frame, text="Voice Settings...", command=open_settings, bootstyle="secondary-outline")
 
 add_files_btn.grid(row=0, column=0, sticky="ew", pady=(0, 6))
 del_file_btn.grid(row=1, column=0, sticky="ew", pady=(0, 6))
-del_all_btn.grid(row=2, column=0, sticky="ew", pady=(0, 18))
+del_all_btn.grid(row=2, column=0, sticky="ew", pady=(0, 6))
 convert_btn.grid(row=3, column=0, sticky="ew", ipady=4)
-settings_btn.grid(row=4, column=0, sticky="ew", pady=(6, 0))
 controls_frame.columnconfigure(0, weight=1)
 
 logger.add_event("info", "Application started successfully")

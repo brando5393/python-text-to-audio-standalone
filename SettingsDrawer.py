@@ -1,3 +1,4 @@
+import os
 import queue
 import threading
 import tkinter as tk
@@ -8,34 +9,61 @@ import Config
 import PiperEngine
 
 
-class SettingsDialog(ttk.Toplevel):
-    """Lets the user pick the TTS engine/voice and tune speed & expressiveness."""
+class SettingsDrawer(ttk.Frame):
+    """A docked side panel (rather than a popup) for voice and app settings.
 
-    def __init__(self, parent, logger):
-        super().__init__(parent)
-        self.title("Voice Settings")
-        self.geometry("460x420")
-        self.resizable(False, False)
+    Changes save immediately as you make them -- there's no separate Save button,
+    since a drawer you can leave open while you work reads as "live", not "pending".
+    """
+
+    def __init__(self, parent, logger, explorer, on_theme_change, on_close, dark_mode):
+        super().__init__(parent, padding=12)
         self.logger = logger
+        self.explorer = explorer
+        self.on_theme_change = on_theme_change
         self.settings = Config.load()
         self._download_events = queue.Queue()
+        self._loading = True  # suppresses auto-save while initial values are being set
 
         self.engine_var = tk.StringVar(value=self.settings["engine"])
         self.voice_var = tk.StringVar(value=self.settings["voice"])
         self.speed_var = tk.DoubleVar(value=self.settings["speed"])
         self.expr_var = tk.DoubleVar(value=self.settings["expressiveness"])
+        self.appearance_var = tk.StringVar(value="dark" if dark_mode else "light")
 
-        self._build_engine_section()
-        self._build_voice_section()
-        self._build_tuning_section()
-        self._build_footer()
+        self._build_header(on_close)
+
+        notebook = ttk.Notebook(self)
+        notebook.pack(fill="both", expand=True, pady=(10, 0))
+        voice_tab = ttk.Frame(notebook, padding=10)
+        app_tab = ttk.Frame(notebook, padding=10)
+        notebook.add(voice_tab, text="Voice")
+        notebook.add(app_tab, text="App")
+
+        self._build_engine_section(voice_tab)
+        self._build_voice_section(voice_tab)
+        self._build_tuning_section(voice_tab)
+        self._build_app_section(app_tab)
+
         self._refresh_voice_list()
+        self._loading = False
+
+        for var in (self.engine_var, self.voice_var, self.speed_var, self.expr_var):
+            var.trace_add("write", lambda *_args: self._save())
 
         self.after(200, self._poll_downloads)
 
-    def _build_engine_section(self):
-        frame = ttk.Labelframe(self, text="Engine", padding=10, bootstyle="primary")
-        frame.pack(fill="x", padx=12, pady=(12, 6))
+    def _build_header(self, on_close):
+        row = ttk.Frame(self)
+        row.pack(fill="x")
+        ttk.Label(row, text="Settings", font=("Georgia", 13, "bold")).pack(side="left")
+        ttk.Button(row, text="Close", command=on_close, bootstyle="secondary-outline").pack(side="right")
+
+    # -- Voice tab -----------------------------------------------------------------
+
+    def _build_engine_section(self, parent):
+        frame = ttk.Labelframe(parent, text="Engine", padding=10, bootstyle="primary")
+        frame.pack(fill="x")
         ttk.Radiobutton(
             frame, text="Piper (natural, offline neural voice)", variable=self.engine_var, value="piper"
         ).pack(anchor="w")
@@ -71,24 +99,24 @@ class SettingsDialog(ttk.Toplevel):
 
         threading.Thread(target=work, daemon=True).start()
 
-    def _build_voice_section(self):
-        frame = ttk.Labelframe(self, text="Voice", padding=10, bootstyle="primary")
-        frame.pack(fill="x", padx=12, pady=6)
+    def _build_voice_section(self, parent):
+        frame = ttk.Labelframe(parent, text="Voice", padding=10, bootstyle="primary")
+        frame.pack(fill="x", pady=(10, 0))
 
         row = ttk.Frame(frame)
         row.pack(fill="x")
         ttk.Label(row, text="Active voice:").pack(side="left")
-        self.voice_menu = ttk.Combobox(row, textvariable=self.voice_var, state="readonly", width=24)
+        self.voice_menu = ttk.Combobox(row, textvariable=self.voice_var, state="readonly", width=20)
         self.voice_menu.pack(side="left", padx=(6, 0))
 
         row2 = ttk.Frame(frame)
         row2.pack(fill="x", pady=(8, 0))
         ttk.Label(row2, text="Download:").pack(side="left")
         self.download_choice = ttk.Combobox(
-            row2, values=list(PiperEngine.CURATED_VOICES.keys()), state="readonly", width=20
+            row2, values=list(PiperEngine.CURATED_VOICES.keys()), state="readonly", width=18
         )
         self.download_choice.pack(side="left", padx=(6, 6))
-        self.download_btn = ttk.Button(row2, text="Download", command=self._download_voice, bootstyle="info-outline")
+        self.download_btn = ttk.Button(row2, text="Get", command=self._download_voice, bootstyle="info-outline")
         self.download_btn.pack(side="left")
 
         self.download_progress = ttk.Progressbar(frame, mode="determinate", maximum=100)
@@ -141,11 +169,12 @@ class SettingsDialog(ttk.Toplevel):
                     self.logger.add_event("error", "Failed to install Piper engine", payload)
         except queue.Empty:
             pass
-        self.after(200, self._poll_downloads)
+        if self.winfo_exists():
+            self.after(200, self._poll_downloads)
 
-    def _build_tuning_section(self):
-        frame = ttk.Labelframe(self, text="Tuning (Piper voices)", padding=10, bootstyle="primary")
-        frame.pack(fill="x", padx=12, pady=6)
+    def _build_tuning_section(self, parent):
+        frame = ttk.Labelframe(parent, text="Tuning (Piper voices)", padding=10, bootstyle="primary")
+        frame.pack(fill="x", pady=(10, 0))
 
         ttk.Label(frame, text="Speed").pack(anchor="w")
         ttk.Scale(frame, variable=self.speed_var, from_=0.5, to=2.0, orient="horizontal").pack(fill="x")
@@ -153,20 +182,46 @@ class SettingsDialog(ttk.Toplevel):
         ttk.Label(frame, text="Expressiveness").pack(anchor="w", pady=(8, 0))
         ttk.Scale(frame, variable=self.expr_var, from_=0.3, to=1.0, orient="horizontal").pack(fill="x")
 
-    def _build_footer(self):
-        row = ttk.Frame(self, padding=12)
-        row.pack(fill="x", side="bottom")
-        ttk.Button(row, text="Save", command=self._save, bootstyle="success").pack(side="right")
-        ttk.Button(row, text="Cancel", command=self.destroy, bootstyle="secondary-outline").pack(
-            side="right", padx=(0, 8)
-        )
-
     def _save(self):
+        if self._loading:
+            return
         Config.save({
             "engine": self.engine_var.get(),
             "voice": self.voice_var.get(),
             "speed": round(self.speed_var.get(), 2),
             "expressiveness": round(self.expr_var.get(), 2),
         })
-        self.logger.add_event("info", "Voice settings saved")
-        self.destroy()
+
+    # -- App tab ---------------------------------------------------------------------
+
+    def _build_app_section(self, parent):
+        location = ttk.Labelframe(parent, text="Save Location", padding=10, bootstyle="primary")
+        location.pack(fill="x")
+        ttk.Button(
+            location, text="Change Save Folder", command=self.explorer.set_download_directory,
+            bootstyle="secondary-outline",
+        ).pack(fill="x", pady=(0, 6))
+        ttk.Button(
+            location, text="New Folder", command=self.explorer.create_subfolder, bootstyle="secondary-outline"
+        ).pack(fill="x", pady=(0, 6))
+        ttk.Button(
+            location, text="Open in File Explorer", command=self._open_save_folder, bootstyle="secondary-outline"
+        ).pack(fill="x")
+
+        appearance = ttk.Labelframe(parent, text="Appearance", padding=10, bootstyle="primary")
+        appearance.pack(fill="x", pady=(10, 0))
+        ttk.Radiobutton(
+            appearance, text="Light", variable=self.appearance_var, value="light", command=self._apply_appearance
+        ).pack(anchor="w")
+        ttk.Radiobutton(
+            appearance, text="Dark", variable=self.appearance_var, value="dark", command=self._apply_appearance
+        ).pack(anchor="w")
+
+    def _open_save_folder(self):
+        try:
+            os.startfile(self.explorer.download_directory)
+        except Exception as e:
+            self.logger.add_event("error", "Failed to open folder", str(e))
+
+    def _apply_appearance(self):
+        self.on_theme_change(self.appearance_var.get() == "dark")

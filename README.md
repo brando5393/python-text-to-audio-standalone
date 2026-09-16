@@ -1,6 +1,8 @@
-<p align="center"><img src="assets/logo.png" width="140" alt="Text to Audio Converter logo"></p>
+<p align="center"><img src="assets/logo.png" width="140" alt="Talebrew logo"></p>
 
-# Text to Audio Converter
+# Talebrew
+
+*Every story, brewed aloud.*
 
 A Windows desktop app that converts text, PDF, and ebook files into audio, using either
 your system's built-in voice or a natural-sounding offline neural voice ([Piper](https://github.com/rhasspy/piper)).
@@ -10,7 +12,8 @@ This started as a fork of [TiffinTech](https://github.com/TiffinTech)'s [python-
 
 ## Features
 - **Supported formats**: `.txt`, `.pdf`, `.epub`, and non-DRM `.mobi`/`.azw3`. DRM-locked Kindle store books can't be decrypted by this app (or legally by anyone without the device's Kindle key) — that's a hard limit, not a bug.
-- **Two TTS engines**: your system's voice (SAPI, via `pyttsx3`) works immediately with no setup, or install [Piper](https://github.com/rhasspy/piper) from Settings for a much more natural-sounding offline neural voice — speed and expressiveness are tunable there too.
+- **Two TTS engines**: your system's voice (SAPI, via `pyttsx3`) works immediately with no setup, or install [Piper](https://github.com/rhasspy/piper) from the Settings drawer for a much more natural-sounding offline neural voice, with several voices to choose from (Amy, Ryan, Lessac, Alan) — speed and expressiveness are tunable there too.
+- **Settings drawer**: a docked side panel (not a popup) for voice/engine settings and app preferences (save location, light/dark appearance) — open it, change things, keep working.
 - **Conversions library**: converted files are organized under a dedicated `Documents/TextToAudio/Conversions` folder, which you can freely split into your own subfolders (Books, Podcasts, etc.) from the app. A browsable panel shows that whole folder tree without leaving the app.
 - **Built-in playback**: double-click any audio file in the Conversions Library to play it, with play/pause/stop controls, right in the app.
 - **Progress dialog**: converting shows a per-file and overall progress bar with an estimated time remaining, plus a Cancel button — no more wondering whether a long book is still working or stuck.
@@ -29,7 +32,7 @@ Build a standalone `.msi` that bundles its own Python — no separate install ne
 poetry install
 poetry run python setup.py bdist_msi
 ```
-The installer lands in `dist\TextToAudioConverter-<version>-win-arm64.msi` (or `-win-amd64` on an Intel/AMD machine). Run it to install; it adds a desktop shortcut.
+The installer lands in `dist\Talebrew-<version>-win-arm64.msi` (or `-win-amd64` on an Intel/AMD machine). Run it to install; it adds a desktop shortcut.
 
 ### Option B: Run from source
 1. Install Python 3.10+ from [python.org](https://www.python.org/downloads/)
@@ -46,12 +49,13 @@ The installer lands in `dist\TextToAudioConverter-<version>-win-arm64.msi` (or `
 
 ## Usage
 1. Launch the app. **Add Files** to queue `.txt`/`.pdf`/`.epub`/`.mobi`/`.azw3` files for conversion.
-2. Use **New Folder** to create a named subfolder under Conversions (e.g. "Books") and make it the active save destination, or **Change Save Folder** to pick any other folder.
-3. Click **Convert to Audio**. Conversion runs in the background — keep using the app while it works.
-4. Browse the **Conversions Library** panel for everything you've converted; double-click a file to play it with the **Playback** controls.
-5. Open **Voice Settings** to install the Piper engine, download a voice, and tune speed/expressiveness. Without Piper installed, conversion automatically falls back to your system voice.
+2. Click **Convert to Audio**. A progress dialog shows per-file and overall progress with an ETA; conversion runs in the background, so you can keep using the app while it works, and **Cancel Remaining** stops anything not yet converted.
+3. Browse the **Conversions Library** panel for everything you've converted; double-click a file to play it with the **Playback** controls.
+4. Open **Settings** (top right) for two tabs:
+   - **Voice**: install the Piper engine, download a voice, pick the active one, and tune speed/expressiveness. Without Piper installed, conversion automatically falls back to your system voice.
+   - **App**: change the save folder or create a new subfolder under Conversions, open it in File Explorer, and switch between light and dark appearance.
 
-The UI uses a custom "coffee house" theme (espresso, caramel, honey-gold on a latte-cream ground) defined in `main.py`. Swap the `THEME` constant there for a built-in ttkbootstrap theme name (e.g. `"darkly"`) if you'd prefer something else.
+The UI uses a custom "coffee house" theme (espresso, caramel, honey-gold, with both a latte-cream light mode and a dark-roast dark mode) defined in `main.py`.
 
 ## Platform notes
 This app targets **Windows**, and specifically was built and tested on **Windows on ARM64**, which has much thinner PyPI wheel coverage than x64 Windows. Two design decisions follow directly from that:
@@ -84,7 +88,7 @@ Porting to macOS/Linux would mean swapping `AudioPlayer.py` for a cross-platform
 | `ProgressDialog.py` | Per-file and overall progress bars with an ETA, fed by `Converter`'s event queue |
 | `PiperEngine.py` | Installs/runs the Piper neural TTS engine |
 | `Config.py` | Persists voice/engine settings to `~/.texttoaudio/config.json` |
-| `SettingsDialog.py` | In-app UI for engine/voice/tuning |
+| `SettingsDrawer.py` | Docked side panel for voice/engine tuning and app preferences (save folder, appearance) |
 | `FileManager.py` | File picking, Conversions folder management |
 | `ConversionsLibrary.py` | Treeview browser over the Conversions folder |
 | `AudioPlayer.py` | Playback controls via Windows MCI |

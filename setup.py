@@ -1,4 +1,4 @@
-"""Builds a Windows .msi installer for the Text to Audio Converter.
+"""Builds a Windows .msi installer for Talebrew.
 
 Usage:
     poetry run python setup.py bdist_msi
@@ -20,20 +20,20 @@ build_exe_options = {
 bdist_msi_options = {
     "upgrade_code": "{9C7C6C1E-6B0D-4C7B-9E6F-2B1A9F0D5A11}",
     "add_to_path": False,
-    "initial_target_dir": r"[ProgramFiles64Folder]\TextToAudioConverter",
+    "initial_target_dir": r"[ProgramFiles64Folder]\Talebrew",
 }
 
 setup(
-    name="TextToAudioConverter",
+    name="Talebrew",
     version="0.1.0",
-    description="Converts text, PDF, and ebook files to audio using offline text-to-speech.",
+    description="Every story, brewed aloud -- converts text, PDF, and ebook files to audio using offline text-to-speech.",
     options={"build_exe": build_exe_options, "bdist_msi": bdist_msi_options},
     executables=[
         Executable(
             "main.py",
             base="Win32GUI",
-            target_name="TextToAudioConverter.exe",
-            shortcut_name="Text to Audio Converter",
+            target_name="Talebrew.exe",
+            shortcut_name="Talebrew",
             shortcut_dir="DesktopFolder",
             icon="assets/icon.ico",
         )
