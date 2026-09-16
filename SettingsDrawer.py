@@ -75,7 +75,7 @@ class SettingsDrawer(ttk.Frame):
         self.engine_status = ttk.Label(frame, bootstyle="secondary")
         self.engine_status.pack(anchor="w", pady=(6, 0))
         self.install_engine_btn = ttk.Button(
-            frame, text="Install Piper Engine", command=self._install_engine, bootstyle="info-outline"
+            frame, text="⬇ Install Piper Engine", command=self._install_engine, bootstyle="info-outline"
         )
         self._update_engine_status()
 
@@ -116,7 +116,7 @@ class SettingsDrawer(ttk.Frame):
             row2, values=list(PiperEngine.CURATED_VOICES.keys()), state="readonly", width=18
         )
         self.download_choice.pack(side="left", padx=(6, 6))
-        self.download_btn = ttk.Button(row2, text="Get", command=self._download_voice, bootstyle="info-outline")
+        self.download_btn = ttk.Button(row2, text="⬇ Get", command=self._download_voice, bootstyle="info-outline")
         self.download_btn.pack(side="left")
 
         self.download_progress = ttk.Progressbar(frame, mode="determinate", maximum=100)
@@ -198,14 +198,14 @@ class SettingsDrawer(ttk.Frame):
         location = ttk.Labelframe(parent, text="Save Location", padding=10, bootstyle="primary")
         location.pack(fill="x")
         ttk.Button(
-            location, text="Change Save Folder", command=self.explorer.set_download_directory,
+            location, text="⚏ Change Save Folder", command=self.explorer.set_download_directory,
             bootstyle="secondary-outline",
         ).pack(fill="x", pady=(0, 6))
         ttk.Button(
-            location, text="New Folder", command=self.explorer.create_subfolder, bootstyle="secondary-outline"
+            location, text="+ New Folder", command=self.explorer.create_subfolder, bootstyle="secondary-outline"
         ).pack(fill="x", pady=(0, 6))
         ttk.Button(
-            location, text="Open in File Explorer", command=self._open_save_folder, bootstyle="secondary-outline"
+            location, text="↗ Open in File Explorer", command=self._open_save_folder, bootstyle="secondary-outline"
         ).pack(fill="x")
 
         appearance = ttk.Labelframe(parent, text="Appearance", padding=10, bootstyle="primary")

@@ -150,7 +150,7 @@ header_block.grid(row=0, column=0, columnspan=3, sticky="w", padx=20, pady=(16, 
 ttk.Label(header_block, text="Talebrew", font=("Georgia", 20, "bold")).pack(anchor="w")
 ttk.Label(header_block, text="Every story, brewed aloud.", bootstyle="secondary").pack(anchor="w")
 
-settings_toggle_btn = ttk.Button(app, text="Settings", command=toggle_settings_drawer, bootstyle="secondary-outline")
+settings_toggle_btn = ttk.Button(app, text="⚙ Settings", command=toggle_settings_drawer, bootstyle="secondary-outline")
 settings_toggle_btn.grid(row=0, column=3, sticky="e", padx=(0, 20), pady=(18, 10))
 
 # Files section
@@ -178,7 +178,7 @@ library_tree.bind("<Double-1>", play_selected_audio)
 library_frame.rowconfigure(0, weight=1)
 library_frame.columnconfigure(0, weight=1)
 
-refresh_library_btn = ttk.Button(library_frame, text="Refresh", command=refresh_library, bootstyle="secondary-outline")
+refresh_library_btn = ttk.Button(library_frame, text="↻ Refresh", command=refresh_library, bootstyle="secondary-outline")
 refresh_library_btn.grid(row=1, column=0, sticky="ew", pady=(8, 0))
 
 # Actions section
@@ -193,8 +193,8 @@ now_playing_var = tk.StringVar(value="Nothing playing — double-click a file in
 now_playing_label = ttk.Label(player_frame, textvariable=now_playing_var, wraplength=180, bootstyle="secondary")
 now_playing_label.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
 
-pause_btn = ttk.Button(player_frame, text="Play / Pause", command=toggle_pause, bootstyle="info-outline")
-stop_playback_btn = ttk.Button(player_frame, text="Stop", command=stop_playback, bootstyle="danger-outline")
+pause_btn = ttk.Button(player_frame, text="▶ Play / Pause", command=toggle_pause, bootstyle="info-outline")
+stop_playback_btn = ttk.Button(player_frame, text="■ Stop", command=stop_playback, bootstyle="danger-outline")
 pause_btn.grid(row=1, column=0, sticky="ew", padx=(0, 4))
 stop_playback_btn.grid(row=1, column=1, sticky="ew", padx=(4, 0))
 player_frame.columnconfigure(0, weight=1)
@@ -248,14 +248,14 @@ settings_drawer = SettingsDrawer(
 )
 settings_drawer.pack(fill="both", expand=True)
 
-add_files_btn = ttk.Button(controls_frame, text="Add Files", command=explorer.add_files, bootstyle="primary")
+add_files_btn = ttk.Button(controls_frame, text="+ Add Files", command=explorer.add_files, bootstyle="primary")
 del_file_btn = ttk.Button(
-    controls_frame, text="Remove Selected", command=explorer.remove_file, bootstyle="secondary-outline"
+    controls_frame, text="− Remove Selected", command=explorer.remove_file, bootstyle="secondary-outline"
 )
 del_all_btn = ttk.Button(
-    controls_frame, text="Remove All", command=explorer.clear_files, bootstyle="secondary-outline"
+    controls_frame, text="✕ Remove All", command=explorer.clear_files, bootstyle="secondary-outline"
 )
-convert_btn = ttk.Button(controls_frame, text="Convert to Audio", bootstyle="success", command=do_convert)
+convert_btn = ttk.Button(controls_frame, text="▶ Convert to Audio", bootstyle="success", command=do_convert)
 
 add_files_btn.grid(row=0, column=0, sticky="ew", pady=(0, 6))
 del_file_btn.grid(row=1, column=0, sticky="ew", pady=(0, 6))
