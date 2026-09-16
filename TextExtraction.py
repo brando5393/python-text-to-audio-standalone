@@ -2,8 +2,8 @@ import os
 import re
 import shutil
 
-import PyPDF2
 import docx
+import pypdf
 from bs4 import BeautifulSoup
 from ebooklib import ITEM_DOCUMENT, epub
 from striprtf.striprtf import rtf_to_text
@@ -55,7 +55,7 @@ def _extract_markdown(path):
 def _extract_pdf(path):
     text = ""
     with open(path, "rb") as pdf_file:
-        reader = PyPDF2.PdfReader(pdf_file)
+        reader = pypdf.PdfReader(pdf_file)
         for page in reader.pages:
             text += page.extract_text() or ""
     return text

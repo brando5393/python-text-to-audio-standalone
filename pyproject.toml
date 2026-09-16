@@ -7,7 +7,6 @@ package-mode = false
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.16"
-PyPDF2 = "^3.0.1"
 pyttsx3 = "^2.90"
 ttkbootstrap = "^2.2.3"
 ebooklib = "^0.20"
@@ -16,6 +15,7 @@ mobi = "^0.4.1"
 python-docx = "^1.2.0"
 striprtf = "^0.0.33"
 packaging = "^26.3"
+pypdf = "^6.18.1"
 
 [tool.poetry.group.dev.dependencies]
 cx-freeze = "^8.7.0"

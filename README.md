@@ -52,7 +52,7 @@ The installer lands in `dist\Talebrew-<version>-win-arm64.msi` (or `-win-amd64` 
    poetry install
    poetry run python main.py
    ```
-   Or with plain pip: `pip install PyPDF2 pyttsx3 ttkbootstrap ebooklib beautifulsoup4 mobi python-docx striprtf packaging` then `python main.py`.
+   Or with plain pip: `pip install pypdf pyttsx3 ttkbootstrap ebooklib beautifulsoup4 mobi python-docx striprtf packaging` then `python main.py`.
 
 ## Usage
 1. Launch the app. **Add Files** to queue `.txt`/`.pdf`/`.epub`/`.mobi`/`.azw3` files for conversion.
@@ -118,6 +118,5 @@ Porting to macOS/Linux would mean swapping `AudioPlayer.py` for a cross-platform
 ## Roadmap / Next Steps
 - **Native ARM64 Piper inference**: replace the emulated `piper.exe` subprocess with a pure-Python pipeline. `onnxruntime` (which does publish a native win-arm64 wheel) would run Piper's ONNX voice model directly, paired with a phonemizer that doesn't require `piper-phonemize`'s unavailable native extension. This would remove the roughly 2-hour-per-novel ceiling described in [Platform notes](#platform-notes) entirely, since the actual bottleneck is emulated ONNX inference, not process startup.
 - **Cross-platform playback/TTS**: see [Platform notes](#platform-notes); the Windows-specific pieces would need swapping out for macOS/Linux support.
-- **Migrate PyPDF2 to pypdf**: PyPDF2 is archived upstream in favor of `pypdf`.
 - **Bundle a default Piper voice** in the installer so natural speech works out of the box, trading a larger installer for zero post-install setup.
 - **Repo hygiene**: consider archiving the old `python-text-to-audio` fork on GitHub now that this standalone repo is the active one.

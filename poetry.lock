@@ -3771,23 +3771,29 @@ pyobjc-core = ">=9.2"
 pyobjc-framework-Cocoa = ">=9.2"
 
 [[package]]
-name = "pypdf2"
-version = "3.0.1"
+name = "pypdf"
+version = "6.18.1"
 description = "A pure-python PDF library capable of splitting, merging, cropping, and transforming PDF files"
 optional = false
-python-versions = ">=3.6"
+python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "PyPDF2-3.0.1.tar.gz", hash = "sha256:a74408f69ba6271f71b9352ef4ed03dc53a31aa404d29b5d31f53bfecfee1440"},
-    {file = "pypdf2-3.0.1-py3-none-any.whl", hash = "sha256:d16e4205cfee272fbdc0568b68d82be796540b1537508cef59388f839c191928"},
+    {file = "pypdf-6.18.1-py3-none-any.whl", hash = "sha256:ee93a2665670ecf57ee81d197a4ca548f3dc15f9cefc56e59b8140866aaa3de5"},
+    {file = "pypdf-6.18.1.tar.gz", hash = "sha256:2441fc839053745638d9b9ddb38ed66beed8d611f47a3036c9838fc4e3074dea"},
 ]
 
+[package.dependencies]
+typing_extensions = {version = ">=4.0", markers = "python_version < \"3.11\""}
+
 [package.extras]
-crypto = ["PyCryptodome"]
-dev = ["black", "flit", "pip-tools", "pre-commit (<2.18.0)", "pytest-cov", "wheel"]
+crypto = ["cryptography (>3.0)"]
+cryptodome = ["PyCryptodome"]
+dev = ["flit", "pip-tools", "pre-commit", "pytest-cov", "pytest-socket", "pytest-timeout", "pytest-xdist", "wheel"]
 docs = ["myst_parser", "sphinx", "sphinx_rtd_theme"]
-full = ["Pillow", "PyCryptodome"]
-image = ["Pillow"]
+fonts = ["fonttools"]
+full = ["Pillow (>=8.0.0)", "arabic-reshaper", "cryptography (>3.0)", "fonttools", "python-bidi"]
+image = ["Pillow (>=8.0.0)"]
+rtl-text = ["arabic-reshaper", "python-bidi"]
 
 [[package]]
 name = "pypiwin32"
@@ -4091,4 +4097,4 @@ dev = ["black (>=19.3b0) ; python_version >= \"3.6\"", "pytest (>=4.6.2)"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.16"
-content-hash = "1fb73b4218205a2a3f6640ed3e5df95e47d1034780748e8ce3d3902c41f3d06e"
+content-hash = "d08fa9d8b09c901b34c0210e64b4cccfcf9ba9728a7a7323296ea0f8d3f4ee79"
