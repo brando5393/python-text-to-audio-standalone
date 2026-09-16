@@ -17,7 +17,7 @@ LEVELS = {
 LEVEL_COLORS = {
     logging.DEBUG: "#888888",
     logging.INFO: "#1c1c1c",
-    logging.WARNING: "#a9720c",
+    logging.WARNING: "#7a561d",  # 5.45:1 contrast on the light theme bg; #a9720c measured only 3.40:1
     logging.ERROR: "#b3261e",
 }
 

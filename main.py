@@ -21,7 +21,9 @@ ttk.Theme(
     secondary="#8a7968",   # warm taupe
     success="#a97142",     # caramel
     info="#5f7a61",        # sage / matcha
-    warning="#c9932f",     # honey gold
+    warning="#7a561d",     # deep amber -- darkened from an earlier honey gold (#c9932f), which
+                           # measured 2.25:1 contrast (cream text on fill) against WCAG AA's 4.5:1
+                           # minimum; this shade measures 5.45:1
     danger="#a3402c",      # brick / dried cherry
     neutral="#8a7968",
     light={"background": "#f2e8d9", "foreground": "#3b2a1e"},
