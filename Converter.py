@@ -15,6 +15,7 @@ import LogManager as logger
 import PiperEngine
 import TextChunking
 import TextExtraction
+import TextSanitization
 
 # In-process pyttsx3 calls can't be killed like a subprocess if they hang; instead a
 # chunk is run on a helper thread and abandoned (left to finish or hang on its own,
@@ -109,6 +110,7 @@ class Converter:
                 continue
             try:
                 text = TextExtraction.extract_text(file)
+                text = TextSanitization.sanitize(text)
                 clean_text = text.strip().replace("\n", " ")
                 if not clean_text:
                     raise ValueError("No extractable text was found in this file")

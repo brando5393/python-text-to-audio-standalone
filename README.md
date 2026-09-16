@@ -16,6 +16,7 @@ This started as a fork of [TiffinTech](https://github.com/TiffinTech)'s [python-
 
 ## Features
 - **Supported formats**: `.txt`, `.md`, `.pdf`, `.epub`, non-DRM `.mobi`/`.azw3`, `.docx`, `.rtf`, and `.html`/`.htm`. DRM-locked Kindle store books can't be decrypted by this app, or legally by anyone without the device's Kindle key, so that's a hard limit rather than a bug.
+- **Text sanitization before synthesis**: extracted text is cleaned up before it reaches the TTS engine, without touching the original file. Table-of-contents entries, page numbers, and repeated running headers/footers are dropped so they aren't read aloud (a long table of contents used to take minutes of spoken audio for content nobody wants to hear); broken Unicode and ligatures from PDF extraction are repaired; and duplicated characters or words from extraction artifacts (like "stoooormy" or "the the") are collapsed.
 - **Two TTS engines, 30+ voices**: your system's voice (SAPI, via `pyttsx3`) works immediately with no setup, or install [Piper](https://github.com/rhasspy/piper) from the Settings drawer for a much more natural-sounding offline neural voice. Over 30 curated Piper voices are available to download individually, spanning English (US and UK, many speakers) plus Spanish, French, German, Italian, Portuguese, Dutch, Russian, and Chinese. Speed and expressiveness are tunable too, and voices you no longer want can be deleted from Settings to free up space.
 - **Settings drawer**: a docked side panel (not a popup) with three tabs: Voice (engine/voice/tuning), App (save location, light/dark appearance, reset-to-defaults buttons), and Accessibility (larger text, sound cues, a written accessibility statement).
 - **Conversions library**: converted files are organized under a dedicated `Documents/TextToAudio/Conversions` folder, which you can freely split into your own subfolders (Books, Podcasts, etc.) from the app. A browsable panel shows that whole folder tree without leaving the app, with a Voice column showing which voice made each file. **Re-convert with Current Voice** regenerates any past file using whichever voice is active now, no original document needed, since the text used to make it is kept alongside the audio.
@@ -99,6 +100,7 @@ Porting to macOS/Linux would mean swapping `AudioPlayer.py` for a cross-platform
 |---|---|
 | `main.py` | UI layout and wiring |
 | `TextExtraction.py` | Pulls plain text out of txt/md/pdf/epub/mobi/azw3/docx/rtf/html |
+| `TextSanitization.py` | Strips tables of contents/headers/footers, fixes broken Unicode, collapses repeated characters/words -- all before synthesis, never touching the original file |
 | `Converter.py` | Runs conversion on a background thread, chunked (see `TextChunking.py`) and dispatched to the active TTS engine. Per-chunk timeouts and a top-level crash guard keep one bad section, or an unexpected error, from hanging the whole batch |
 | `TextChunking.py` | Splits long text into sentence-bounded chunks so long documents synthesize incrementally instead of in one long call |
 | `ProgressDialog.py` | Per-file and overall progress bars with an ETA, fed by `Converter`'s event queue |
