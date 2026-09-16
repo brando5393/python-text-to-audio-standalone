@@ -13,6 +13,7 @@ import SoundEffects
 from AudioPlayer import AudioPlayer
 from ConversionsLibrary import ConversionsLibrary
 from LogManager import LogManager
+from MiniPlayer import MiniPlayer
 from ProgressDialog import ProgressDialog
 from SettingsDrawer import SettingsDrawer
 
@@ -36,8 +37,32 @@ THEME = "coffeehouse-light"
 
 player = AudioPlayer()
 progress_dialog = None
+mini_player = None
 batch_had_error = False
 batch_had_done = False
+
+
+def enter_mini_mode(persist=True):
+    global mini_player
+    if mini_player is not None:
+        return
+    app.withdraw()
+    mini_player = MiniPlayer(app, player, now_playing_var, on_expand=exit_mini_mode)
+    if persist:
+        current = Config.load()
+        current["start_in_mini_mode"] = True
+        Config.save(current)
+
+
+def exit_mini_mode():
+    global mini_player
+    if mini_player is not None:
+        mini_player.destroy()
+        mini_player = None
+    app.deiconify()
+    current = Config.load()
+    current["start_in_mini_mode"] = False
+    Config.save(current)
 
 
 def confirm_quit():
@@ -243,6 +268,10 @@ pause_btn = ttk.Button(player_frame, text="▶ Play / Pause", command=toggle_pau
 stop_playback_btn = ttk.Button(player_frame, text="■ Stop", command=stop_playback, bootstyle="danger-outline")
 pause_btn.grid(row=1, column=0, sticky="ew", padx=(0, 4))
 stop_playback_btn.grid(row=1, column=1, sticky="ew", padx=(4, 0))
+mini_player_btn = ttk.Button(
+    player_frame, text="⤡ Mini Player", command=lambda: enter_mini_mode(), bootstyle="secondary-outline"
+)
+mini_player_btn.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
 player_frame.columnconfigure(0, weight=1)
 player_frame.columnconfigure(1, weight=1)
 
@@ -314,5 +343,8 @@ controls_frame.columnconfigure(0, weight=1)
 logger.add_event("info", "Application started successfully")
 SoundEffects.play("ready")
 app.after(300, poll_conversions)
+
+if Config.load()["start_in_mini_mode"]:
+    enter_mini_mode(persist=False)  # already persisted from last session; no need to re-save
 
 app.mainloop()

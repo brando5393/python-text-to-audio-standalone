@@ -10,7 +10,7 @@ def test_save_then_load_round_trips(tmp_path, monkeypatch):
     monkeypatch.setattr(Config, "CONFIG_PATH", str(tmp_path / "config.json"))
     settings = {
         "engine": "piper", "voice": "en_US-ryan-high", "speed": 1.5, "expressiveness": 0.8,
-        "large_text": True, "sound_effects_enabled": False,
+        "large_text": True, "sound_effects_enabled": False, "start_in_mini_mode": True,
     }
     Config.save(settings)
     assert Config.load() == settings

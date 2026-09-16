@@ -231,9 +231,16 @@ class SettingsDrawer(ttk.Frame):
         ttk.Scale(frame, variable=self.expr_var, from_=0.3, to=1.0, orient="horizontal").pack(fill="x")
 
     def _save(self):
+        # Merges onto the current settings on disk (rather than constructing a fixed
+        # field list) so a setting the drawer doesn't manage -- like start_in_mini_mode,
+        # set elsewhere in the app -- is never accidentally dropped when the drawer
+        # saves. This bit repeatedly: every time a new Config field was added, every
+        # save/reset call site here needed updating too, or Config.save() (which
+        # requires every DEFAULTS key present) would KeyError.
         if self._loading:
             return
-        Config.save({
+        current = Config.load()
+        current.update({
             "engine": self.engine_var.get(),
             "voice": self.voice_var.get(),
             "speed": round(self.speed_var.get(), 2),
@@ -241,6 +248,7 @@ class SettingsDrawer(ttk.Frame):
             "large_text": self.large_text_var.get(),
             "sound_effects_enabled": self.sound_effects_var.get(),
         })
+        Config.save(current)
         self.on_text_scale_change(self.large_text_var.get())
 
     # -- App tab ---------------------------------------------------------------------
@@ -296,11 +304,14 @@ class SettingsDrawer(ttk.Frame):
     def _reset_voice_settings(self):
         if messagebox.askyesno("Reset Voice Settings", "Reset engine, voice, speed, and expressiveness to defaults?"):
             self._loading = True
-            Config.save({
-                **Config.DEFAULTS,
-                "large_text": self.large_text_var.get(),
-                "sound_effects_enabled": self.sound_effects_var.get(),
+            current = Config.load()
+            current.update({
+                "engine": Config.DEFAULTS["engine"],
+                "voice": Config.DEFAULTS["voice"],
+                "speed": Config.DEFAULTS["speed"],
+                "expressiveness": Config.DEFAULTS["expressiveness"],
             })
+            Config.save(current)
             self.engine_var.set(Config.DEFAULTS["engine"])
             self._refresh_voice_list()
             self.voice_var.set(Config.DEFAULTS["voice"])
