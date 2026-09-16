@@ -57,8 +57,9 @@ This app targets **Windows**, and specifically was built and tested on **Windows
 - **Playback** (`AudioPlayer.py`) uses Windows' built-in MCI API via `ctypes` rather than a package like `pygame`, which publishes no Windows-ARM64 wheel at all.
 - **Piper** (`PiperEngine.py`) is driven as a subprocess against its self-contained Windows x64 binary (running under Windows 11's built-in x64 emulation on ARM64) rather than via the `piper-tts` pip package, whose native `piper-phonemize` dependency also has no win-arm64 wheel.
 - **Audio output is WAV**, not MP3 — MP3 playback via MCI depends on Windows Media Player being installed, which it isn't by default on Windows 11.
+- **Piper is slow on ARM64 for book-length text**: emulation costs the most on the heavy neural-net inference step, not just process startup. Measured on this machine: ~31 seconds per 3000-character chunk, so a full novel (roughly 700,000 characters) via Piper takes **on the order of 2 hours**. The system voice (`pyttsx3`/SAPI) runs natively and converts the same novel in **under 3 minutes**, just with a more robotic voice. Until there's a native (non-emulated) ARM64 path for Piper's ONNX inference, **use the system voice for full books and Piper for shorter documents** (articles, chapters, short stories) where the wait is seconds, not hours.
 
-Porting to macOS/Linux would mean swapping `AudioPlayer.py` for a cross-platform library (e.g. `sounddevice`) and using Piper's Linux/macOS binaries directly (no emulation needed there).
+Porting to macOS/Linux would mean swapping `AudioPlayer.py` for a cross-platform library (e.g. `sounddevice`) and using Piper's Linux/macOS binaries directly (no emulation needed there, and full novels would convert in reasonable time even with Piper).
 
 ## For Developers
 - Set up a development environment:
@@ -77,7 +78,8 @@ Porting to macOS/Linux would mean swapping `AudioPlayer.py` for a cross-platform
 |---|---|
 | `main.py` | UI layout and wiring |
 | `TextExtraction.py` | Pulls plain text out of txt/pdf/epub/mobi/azw3 |
-| `Converter.py` | Runs conversion on a background thread, dispatches to the active TTS engine |
+| `Converter.py` | Runs conversion on a background thread, chunked (see `TextChunking.py`) and dispatched to the active TTS engine |
+| `TextChunking.py` | Splits long text into sentence-bounded chunks so long documents synthesize incrementally instead of in one long call |
 | `PiperEngine.py` | Installs/runs the Piper neural TTS engine |
 | `Config.py` | Persists voice/engine settings to `~/.texttoaudio/config.json` |
 | `SettingsDialog.py` | In-app UI for engine/voice/tuning |
@@ -87,8 +89,9 @@ Porting to macOS/Linux would mean swapping `AudioPlayer.py` for a cross-platform
 | `LogManager.py` | Rotating file log + live on-screen log feed |
 
 ## Roadmap / Next Steps
+- **Native ARM64 Piper inference**: replace the emulated `piper.exe` subprocess with a pure-Python pipeline — `onnxruntime` (which does publish a native win-arm64 wheel) running Piper's ONNX voice model directly, paired with a phonemizer that doesn't require `piper-phonemize`'s unavailable native extension. Would remove the ~2-hour-per-novel ceiling described in [Platform notes](#platform-notes) entirely, since the actual bottleneck is emulated ONNX inference, not process startup.
 - **Cross-platform playback/TTS**: see [Platform notes](#platform-notes) — the Windows-specific pieces would need swapping out for macOS/Linux support.
-- **Progress feedback**: add a progress bar or per-file status in the file list while a batch conversion runs (the background worker already reports per-file completion; the UI doesn't surface it yet beyond the log).
+- **Progress feedback**: `Converter` already emits a per-chunk progress event as a file converts; the UI doesn't surface it yet beyond periodic log lines — a progress bar next to the file in the list would be the natural next step.
 - **Tests**: there's no automated test coverage yet.
 - **Migrate PyPDF2 → pypdf**: PyPDF2 is archived upstream in favor of `pypdf`.
 - **Bundle a default Piper voice** in the installer so natural speech works out of the box, trading a larger installer for zero post-install setup.

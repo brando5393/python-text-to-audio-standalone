@@ -24,7 +24,9 @@ class ConversionsLibrary:
             if entry.is_dir():
                 node = self.tree.insert(parent_id, "end", text=f"[Folder] {entry.name}", values=(entry.path, "dir"))
                 self._insert_dir(node, entry.path)
-            else:
+            elif not entry.name.endswith(".partial"):
+                # A ".partial" file is a conversion still in progress (see Converter.py);
+                # hide it so a mid-conversion refresh can't be mistaken for a finished file.
                 node = self.tree.insert(parent_id, "end", text=entry.name, values=(entry.path, "file"))
 
     def path_for(self, item_id):
