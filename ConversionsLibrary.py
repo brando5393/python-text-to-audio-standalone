@@ -51,7 +51,9 @@ class ConversionsLibrary:
                 self._item_data[node] = (entry.path, "dir")
                 self._insert_dir(node, entry.path)
             elif entry.name.endswith(".json"):
-                continue  # Sidecar metadata for re-conversion, not a user-facing entry.
+                continue  # Sidecar metadata for display/re-conversion, not a user-facing entry.
+            elif entry.name.endswith(".pcm"):
+                continue  # Scratch audio for a resumable in-progress conversion (see Converter.py).
             elif not entry.name.endswith(".partial"):
                 # A ".partial" file is a conversion still in progress (see Converter.py);
                 # hide it so a mid-conversion refresh can't be mistaken for a finished file.

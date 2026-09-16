@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import queue
@@ -95,7 +96,6 @@ class Converter:
 
         if not use_piper:
             self._pyttsx3_speaker = pyttsx3.init()
-        engine_label = f"Piper ({settings['voice']})" if use_piper else "system voice (pyttsx3)"
         os.makedirs(output_dir, exist_ok=True)
 
         # Build the full plan up front (extract + chunk every file) so the progress UI
@@ -134,30 +134,76 @@ class Converter:
             try:
                 global_done = self._convert_one(
                     item["file"], item["chunks"], item["output_file"], item["text"],
-                    use_piper, settings, engine_label, global_done, total_chunks, start_time,
+                    use_piper, settings, global_done, total_chunks, start_time,
                 )
             except Exception as e:
                 error_message = f"Failed to convert file '{item['file']}' to audio: {str(e)}"
                 self.logger.add_event("error", error_message)
                 self._events.put(("error", item["file"], str(e)))
 
-    def _convert_one(self, file, chunks, output_file, text, use_piper, settings, engine_label, global_done, total_chunks, start_time):
+    def _convert_one(self, file, chunks, output_file, text, use_piper, settings, global_done, total_chunks, start_time):
+        # Each chunk's audio is appended to a scratch PCM file as soon as it's synthesized,
+        # with a small sidecar tracking how many chunks are already in it. If the app closes
+        # (or crashes) mid-file, that scratch file and sidecar survive -- reconverting the
+        # same source text later picks up from the first unfinished chunk instead of
+        # resynthesizing everything, which otherwise wasted real synthesis time (Piper on
+        # this machine runs under x64 emulation and isn't fast) every time a long book got
+        # interrupted partway through.
         total = len(chunks)
+        progress_path = output_file + ".progress.json"
+        pcm_path = output_file + ".partial.pcm"
+        text_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+        resume = _load_resume_state(progress_path, pcm_path, text_hash, total)
+        if resume:
+            start_index = resume["completed_chunks"]
+            resume_use_piper = resume["engine"] == "piper"
+            resume_settings = {
+                "voice": resume["voice_id"], "speed": settings["speed"], "expressiveness": settings["expressiveness"],
+            }
+            wav_info = {"nchannels": resume["nchannels"], "sampwidth": resume["sampwidth"], "framerate": resume["framerate"]}
+            self.logger.add_event(
+                "info", f"Resuming '{os.path.basename(file)}' from section {start_index + 1}/{total}",
+                "Picking up an interrupted conversion instead of starting over",
+            )
+        else:
+            start_index = 0
+            resume_use_piper = use_piper
+            resume_settings = settings
+            wav_info = {}
+            for stale_path in (progress_path, pcm_path):
+                try:
+                    os.remove(stale_path)
+                except OSError:
+                    pass
+
+        if start_index:
+            global_done += start_index
+            self._events.put(("progress", file, start_index, total, global_done, total_chunks, time.time() - start_time))
+
+        engine_label = f"Piper ({resume_settings['voice']})" if resume_use_piper else "system voice (pyttsx3)"
         tmp_dir = tempfile.mkdtemp(prefix="tta_")
-        chunk_paths = []
+        chunk_scratch = os.path.join(tmp_dir, "chunk.wav")
 
         try:
             log_every = max(1, total // 10)
-            for i, chunk in enumerate(chunks):
+            for i in range(start_index, total):
                 if self._cancel_event.is_set():
                     self.logger.add_event("warn", f"Conversion cancelled: '{os.path.basename(file)}'")
                     self._events.put(("skipped", file, "Cancelled"))
-                    return global_done
+                    return global_done  # progress/pcm scratch files are left in place on purpose, for next time
 
                 try:
-                    chunk_path = os.path.join(tmp_dir, f"chunk_{i:05d}.wav")
-                    self._synthesize_chunk(chunk, chunk_path, use_piper, settings)
-                    chunk_paths.append(chunk_path)
+                    self._synthesize_chunk(chunks[i], chunk_scratch, resume_use_piper, resume_settings)
+                    with wave.open(chunk_scratch, "rb") as chunk_wav:
+                        if not wav_info:
+                            wav_info = {
+                                "nchannels": chunk_wav.getnchannels(), "sampwidth": chunk_wav.getsampwidth(),
+                                "framerate": chunk_wav.getframerate(),
+                            }
+                        frames = chunk_wav.readframes(chunk_wav.getnframes())
+                    with open(pcm_path, "ab") as pcm_file:
+                        pcm_file.write(frames)
                 except Exception as chunk_error:
                     # Skip a bad or timed-out chunk rather than losing every chunk already
                     # synthesized, or hanging the whole app on one stuck section.
@@ -170,18 +216,29 @@ class Converter:
                 self._events.put(("progress", file, i + 1, total, global_done, total_chunks, elapsed))
                 if total > 1 and ((i + 1) % log_every == 0 or i + 1 == total):
                     self.logger.add_event("info", f"Converting '{os.path.basename(file)}': {i + 1}/{total} sections")
+                _save_resume_state(progress_path, i + 1, total, text_hash, resume_use_piper, resume_settings.get("voice"), wav_info)
 
-            if not chunk_paths:
+            if not os.path.isfile(pcm_path) or os.path.getsize(pcm_path) == 0:
                 raise ValueError("No audio could be generated for this file")
 
             partial_path = output_file + ".partial"
-            _concatenate_wavs(chunk_paths, partial_path)
+            with open(pcm_path, "rb") as pcm_file, wave.open(partial_path, "wb") as out:
+                out.setnchannels(wav_info["nchannels"])
+                out.setsampwidth(wav_info["sampwidth"])
+                out.setframerate(wav_info["framerate"])
+                out.writeframes(pcm_file.read())
             os.replace(partial_path, output_file)  # atomic: the library never sees a half-written file
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
+        for scratch_path in (progress_path, pcm_path):
+            try:
+                os.remove(scratch_path)
+            except OSError:
+                pass
+
         self.logger.add_event("info", "File converted successfully", f"{engine_label} -> {output_file}")
-        _write_sidecar(output_file, text, use_piper, settings)
+        _write_sidecar(output_file, text, resume_use_piper, resume_settings)
         self._events.put(("done", file, output_file))
         return global_done
 
@@ -197,6 +254,12 @@ class Converter:
                 noise_scale=settings["expressiveness"],
             )
             return
+
+        if self._pyttsx3_speaker is None:
+            # Normally initialized once per batch in _convert_worker_inner, but a resumed
+            # file can call for the system voice even when the rest of the batch is using
+            # Piper (it resumes with whatever voice it was originally started with).
+            self._pyttsx3_speaker = pyttsx3.init()
 
         done = threading.Event()
         error_box = []
@@ -241,12 +304,36 @@ def _write_sidecar(output_file, text, use_piper, settings):
         pass  # Metadata is a display/re-convert convenience, not required for the audio itself.
 
 
-def _concatenate_wavs(chunk_paths, output_path):
-    with wave.open(chunk_paths[0], "rb") as first:
-        params = first.getparams()
+def _load_resume_state(progress_path, pcm_path, text_hash, total_chunks):
+    """Returns the saved resume state for this exact output file, or None if there isn't
+    a usable one -- either no interrupted attempt exists, or its text no longer matches
+    (the source document changed since the crash, so continuing would risk stitching
+    audio from two different texts together)."""
+    if not os.path.isfile(pcm_path):
+        return None
+    try:
+        with open(progress_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+    if data.get("text_hash") != text_hash or data.get("total_chunks") != total_chunks:
+        return None
+    return data
 
-    with wave.open(output_path, "wb") as out:
-        out.setparams(params)
-        for path in chunk_paths:
-            with wave.open(path, "rb") as chunk:
-                out.writeframes(chunk.readframes(chunk.getnframes()))
+
+def _save_resume_state(progress_path, completed_chunks, total_chunks, text_hash, use_piper, voice_id, wav_info):
+    state = {
+        "completed_chunks": completed_chunks,
+        "total_chunks": total_chunks,
+        "text_hash": text_hash,
+        "engine": "piper" if use_piper else "pyttsx3",
+        "voice_id": voice_id,
+        **wav_info,
+    }
+    tmp_path = progress_path + ".tmp"
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(state, f)
+        os.replace(tmp_path, progress_path)
+    except OSError:
+        pass  # Losing a checkpoint just means a resume restarts this file from scratch -- not fatal.

@@ -21,7 +21,7 @@ This started as a fork of [TiffinTech](https://github.com/TiffinTech)'s [python-
 - **Conversions library**: converted files are organized under a dedicated `Documents/TextToAudio/Conversions` folder, which you can freely split into your own subfolders (Books, Podcasts, etc.) from the app. A browsable panel shows that whole folder tree without leaving the app, with a Voice column showing which voice made each file. **Re-convert with Current Voice** regenerates any past file using whichever voice is active now, no original document needed, since the text used to make it is kept alongside the audio.
 - **Built-in playback**: double-click any audio file in the Conversions Library to play it, with play/pause/stop controls right in the app, plus a mini player mode for keeping Talebrew out of the way while listening (remembers whether it was open across restarts).
 - **Progress dialog**: converting shows a per-file and overall progress bar with an estimated time remaining, plus a Cancel button, so there's no wondering whether a long book is still working or stuck.
-- **Responsive and crash-resistant**: conversion runs on a background thread and in small chunks, each with its own timeout, so a single stuck or corrupt section is skipped and logged instead of hanging the whole conversion (or the app) indefinitely.
+- **Responsive and crash-resistant**: conversion runs on a background thread and in small chunks, each with its own timeout, so a single stuck or corrupt section is skipped and logged instead of hanging the whole conversion (or the app) indefinitely. If the app closes or crashes mid-conversion, it automatically resumes from the last completed chunk next time it opens, rather than starting the whole file over.
 - **Sound cues**: short tones for app-ready, conversion-done, error, and exit moments, useful when the window isn't in view; toggle them off in Settings if you'd rather not have them.
 - **Confirmations where they matter**: changing the save folder confirms the exact destination before committing to it, and quitting asks first; reset buttons for save folder, voice settings, appearance, or everything at once are in Settings.
 - **Logging**: a rotating log file at `~/.texttoaudio/texttoaudio.log`, plus a live, color-coded Activity Log panel in the app.
@@ -112,6 +112,7 @@ Porting to macOS/Linux would mean swapping `AudioPlayer.py` for a cross-platform
 | `SoundEffects.py` | Plays short UI sound cues via their own MCI alias, separate from `AudioPlayer` |
 | `FileManager.py` | File picking, Conversions folder management |
 | `ConversionsLibrary.py` | Treeview browser over the Conversions folder |
+| `ConversionQueue.py` | Remembers an in-progress batch so it can auto-resume if the app closes before it finishes |
 | `AudioPlayer.py` | Playback controls via Windows MCI |
 | `LogManager.py` | Rotating file log and live on-screen log feed |
 

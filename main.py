@@ -9,6 +9,7 @@ import ttkbootstrap as ttk
 
 import AppIcon
 import Config
+import ConversionQueue
 import Converter
 import FileManager
 import SoundEffects
@@ -156,13 +157,20 @@ def refresh_library():
     library.refresh()
 
 
-def do_convert():
+def start_conversion(files, output_dir):
+    """Shared by a normal Convert click, a re-convert, and resuming an interrupted batch
+    from last session -- all three just need a file list and a destination."""
     global progress_dialog
+    ConversionQueue.save(files, output_dir)
+    progress_dialog = ProgressDialog(app, converter, len(files))
+    converter.convert_to_audio(files, output_dir)
+
+
+def do_convert():
     if not explorer.file_list:
         logger.add_event("warn", "No files queued for conversion")
         return
-    progress_dialog = ProgressDialog(app, converter, len(explorer.file_list))
-    converter.convert_to_audio(explorer.file_list, explorer.download_directory)
+    start_conversion(explorer.file_list, explorer.download_directory)
     explorer.clear_files()
 
 
@@ -183,6 +191,7 @@ def poll_conversions():
             elif event[0] == "done":
                 batch_had_done = True
             elif event[0] == "all_done":
+                ConversionQueue.clear()  # the batch is no longer "in progress" either way
                 if batch_had_error:
                     SoundEffects.play("error")
                 elif batch_had_done:
@@ -230,7 +239,6 @@ def reconvert_selected():
         )
         return
 
-    global progress_dialog
     output_dir = os.path.dirname(path)
     base_name = os.path.splitext(os.path.basename(path))[0]
     tmp_dir = tempfile.mkdtemp(prefix="tta_reconvert_")
@@ -238,8 +246,7 @@ def reconvert_selected():
     with open(text_path, "w", encoding="utf-8") as f:
         f.write(text)
 
-    progress_dialog = ProgressDialog(app, converter, 1)
-    converter.convert_to_audio([text_path], output_dir)
+    start_conversion([text_path], output_dir)
 
 
 def toggle_pause():
@@ -428,6 +435,22 @@ logger.add_event("info", "Application started successfully")
 SoundEffects.play("ready")
 app.after(300, poll_conversions)
 app.after(2000, update_banner.check_in_background)  # delayed so it never slows down launch
+
+pending_batch = ConversionQueue.load()
+if pending_batch:
+    resumable_files = [f for f in pending_batch["files"] if os.path.isfile(f)]
+    missing_count = len(pending_batch["files"]) - len(resumable_files)
+    if missing_count:
+        logger.add_event(
+            "warn", f"{missing_count} file(s) from an interrupted conversion could no longer be found",
+        )
+    if resumable_files:
+        logger.add_event(
+            "info", f"Resuming {len(resumable_files)} file(s) from a conversion interrupted last session",
+        )
+        start_conversion(resumable_files, pending_batch["output_dir"])
+    else:
+        ConversionQueue.clear()
 
 if Config.load()["start_in_mini_mode"]:
     enter_mini_mode(persist=False)  # already persisted from last session; no need to re-save
