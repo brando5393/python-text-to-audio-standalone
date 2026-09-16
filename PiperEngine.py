@@ -70,11 +70,20 @@ def _download(url, dest_path, progress_cb):
     os.replace(tmp_path, dest_path)
 
 
+# Measured ~31s for a 3000-char chunk under x64 emulation on ARM64 -- generous multiplier
+# so normal runs never hit this, while a genuinely stuck process still gets killed instead
+# of blocking the worker thread (and everything queued behind it) forever.
+MIN_TIMEOUT_SECONDS = 90
+SECONDS_PER_CHAR = 0.25
+
+
 def synthesize(text, voice_id, output_wav_path, length_scale=1.0, noise_scale=0.667, noise_w=0.8):
     """Synthesizes `text` to `output_wav_path` using an installed Piper voice.
 
     length_scale: speaking rate (1.0 normal, >1 slower, <1 faster).
     noise_scale / noise_w: Piper's naturalness/variation controls ("expressiveness").
+    Raises TimeoutError if the process doesn't finish in a generous multiple of the
+    time a chunk this size should reasonably take, instead of blocking forever.
     """
     model_path = os.path.join(VOICES_DIR, voice_id + ".onnx")
     if not is_engine_installed():
@@ -90,9 +99,13 @@ def synthesize(text, voice_id, output_wav_path, length_scale=1.0, noise_scale=0.
         "--noise_scale", str(noise_scale),
         "--noise_w", str(noise_w),
     ]
-    result = subprocess.run(
-        command, input=text, capture_output=True, text=True, encoding="utf-8",
-        creationflags=subprocess.CREATE_NO_WINDOW,
-    )
+    timeout = max(MIN_TIMEOUT_SECONDS, len(text) * SECONDS_PER_CHAR)
+    try:
+        result = subprocess.run(
+            command, input=text, capture_output=True, text=True, encoding="utf-8",
+            creationflags=subprocess.CREATE_NO_WINDOW, timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        raise TimeoutError(f"Piper did not finish this section within {int(timeout)}s -- treating it as stuck")
     if result.returncode != 0:
         raise RuntimeError(f"Piper failed (exit {result.returncode}): {result.stderr.strip()[:500]}")

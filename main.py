@@ -10,6 +10,7 @@ import FileManager
 from AudioPlayer import AudioPlayer
 from ConversionsLibrary import ConversionsLibrary
 from LogManager import LogManager
+from ProgressDialog import ProgressDialog
 from SettingsDialog import SettingsDialog
 
 # A warm "coffee house" theme: espresso brown, caramel, and honey accents on a latte-cream
@@ -28,6 +29,7 @@ ttk.Theme(
 THEME = "coffeehouse-light"
 
 player = AudioPlayer()
+progress_dialog = None
 
 
 def confirm_quit():
@@ -64,9 +66,11 @@ def open_settings():
 
 
 def do_convert():
+    global progress_dialog
     if not explorer.file_list:
         logger.add_event("warn", "No files queued for conversion")
         return
+    progress_dialog = ProgressDialog(app, converter, len(explorer.file_list))
     converter.convert_to_audio(explorer.file_list, explorer.download_directory)
     explorer.clear_files()
 
@@ -74,7 +78,10 @@ def do_convert():
 def poll_conversions():
     events = converter.poll_events()
     if events:
-        refresh_library()
+        if any(event[0] in ("done", "error") for event in events):
+            refresh_library()
+        if progress_dialog is not None and progress_dialog.winfo_exists():
+            progress_dialog.handle_events(events)
     app.after(300, poll_conversions)
 
 

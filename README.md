@@ -13,7 +13,8 @@ This started as a fork of [TiffinTech](https://github.com/TiffinTech)'s [python-
 - **Two TTS engines**: your system's voice (SAPI, via `pyttsx3`) works immediately with no setup, or install [Piper](https://github.com/rhasspy/piper) from Settings for a much more natural-sounding offline neural voice — speed and expressiveness are tunable there too.
 - **Conversions library**: converted files are organized under a dedicated `Documents/TextToAudio/Conversions` folder, which you can freely split into your own subfolders (Books, Podcasts, etc.) from the app. A browsable panel shows that whole folder tree without leaving the app.
 - **Built-in playback**: double-click any audio file in the Conversions Library to play it, with play/pause/stop controls, right in the app.
-- **Responsive UI**: conversion runs on a background thread, so the window never freezes while a file is being processed — even a long book.
+- **Progress dialog**: converting shows a per-file and overall progress bar with an estimated time remaining, plus a Cancel button — no more wondering whether a long book is still working or stuck.
+- **Responsive and crash-resistant**: conversion runs on a background thread and in small chunks, each with its own timeout — a single stuck or corrupt section is skipped and logged instead of hanging the whole conversion (or the app) indefinitely.
 - **Logging**: a rotating log file at `~/.texttoaudio/texttoaudio.log`, plus a live, color-coded Activity Log panel in the app.
 
 ## System Requirements
@@ -78,8 +79,9 @@ Porting to macOS/Linux would mean swapping `AudioPlayer.py` for a cross-platform
 |---|---|
 | `main.py` | UI layout and wiring |
 | `TextExtraction.py` | Pulls plain text out of txt/pdf/epub/mobi/azw3 |
-| `Converter.py` | Runs conversion on a background thread, chunked (see `TextChunking.py`) and dispatched to the active TTS engine |
+| `Converter.py` | Runs conversion on a background thread, chunked (see `TextChunking.py`) and dispatched to the active TTS engine; per-chunk timeouts and a top-level crash guard keep one bad section (or an unexpected error) from hanging the whole batch |
 | `TextChunking.py` | Splits long text into sentence-bounded chunks so long documents synthesize incrementally instead of in one long call |
+| `ProgressDialog.py` | Per-file and overall progress bars with an ETA, fed by `Converter`'s event queue |
 | `PiperEngine.py` | Installs/runs the Piper neural TTS engine |
 | `Config.py` | Persists voice/engine settings to `~/.texttoaudio/config.json` |
 | `SettingsDialog.py` | In-app UI for engine/voice/tuning |
