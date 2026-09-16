@@ -81,6 +81,7 @@ def toggle_settings_drawer():
     if drawer_wrapper.winfo_ismapped():
         drawer_wrapper.grid_remove()
     else:
+        settings_drawer.refresh_from_disk()
         drawer_wrapper.grid()
 
 

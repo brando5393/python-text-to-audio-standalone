@@ -2,6 +2,7 @@ import os
 import queue
 import threading
 import tkinter as tk
+from tkinter import messagebox
 
 import ttkbootstrap as ttk
 
@@ -52,6 +53,25 @@ class SettingsDrawer(ttk.Frame):
             var.trace_add("write", lambda *_args: self._save())
 
         self.after(200, self._poll_downloads)
+
+    def refresh_from_disk(self):
+        """Re-reads settings from disk into the drawer's controls.
+
+        The drawer is created once and toggled visible/hidden rather than rebuilt, so
+        without this its fields would go stale the moment anything outside the drawer
+        changes config.json -- and since all four fields save together, touching even
+        one unrelated control (e.g. the speed slider) would silently overwrite the
+        others back to those stale values. Called every time the drawer is opened.
+        """
+        self._loading = True
+        settings = Config.load()
+        self.engine_var.set(settings["engine"])
+        self._refresh_voice_list()
+        self.voice_var.set(settings["voice"])
+        self.speed_var.set(settings["speed"])
+        self.expr_var.set(settings["expressiveness"])
+        self._update_engine_status()
+        self._loading = False
 
     def _build_header(self, on_close):
         row = ttk.Frame(self)
@@ -107,7 +127,8 @@ class SettingsDrawer(ttk.Frame):
         row.pack(fill="x")
         ttk.Label(row, text="Active voice:").pack(side="left")
         self.voice_menu = ttk.Combobox(row, textvariable=self.voice_var, state="readonly", width=20)
-        self.voice_menu.pack(side="left", padx=(6, 0))
+        self.voice_menu.pack(side="left", padx=(6, 6))
+        ttk.Button(row, text="✕", width=3, command=self._delete_voice, bootstyle="danger-outline").pack(side="left")
 
         row2 = ttk.Frame(frame)
         row2.pack(fill="x", pady=(8, 0))
@@ -125,8 +146,24 @@ class SettingsDrawer(ttk.Frame):
     def _refresh_voice_list(self):
         voices = PiperEngine.list_installed_voices()
         self.voice_menu.configure(values=voices)
-        if self.voice_var.get() not in voices and voices:
-            self.voice_var.set(voices[0])
+        if self.voice_var.get() not in voices:
+            self.voice_var.set(voices[0] if voices else "")
+
+    def _delete_voice(self):
+        voice_id = self.voice_var.get()
+        if not voice_id:
+            return
+        size_mb = PiperEngine.voice_size_bytes(voice_id) / (1024 * 1024)
+        confirmed = messagebox.askyesno(
+            "Delete Voice",
+            f"Delete '{voice_id}' and free up {size_mb:.0f} MB?\n\n"
+            "You can download it again later from the list below.",
+        )
+        if not confirmed:
+            return
+        PiperEngine.delete_voice(voice_id)
+        self.logger.add_event("info", f"Deleted voice: {voice_id}")
+        self._refresh_voice_list()
 
     def _download_voice(self):
         label = self.download_choice.get()

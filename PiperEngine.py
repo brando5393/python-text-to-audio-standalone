@@ -11,14 +11,44 @@ PIPER_EXE = os.path.join(ENGINE_DIR, "piper", "piper.exe")
 
 PIPER_RELEASE_URL = "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip"
 
-# A small curated set of natural-sounding English voices from the Piper voice pack.
-# (Runs under Windows' built-in x64 emulation on ARM64 -- Piper ships no native
-# win-arm64 build, but the amd64 build works fine through emulation.)
+# A broad set of free voices from Piper's voice pack (https://github.com/rhasspy/piper,
+# MIT-licensed), picking each speaker's best available quality tier. Runs under Windows'
+# built-in x64 emulation on ARM64 -- Piper ships no native win-arm64 build, but the amd64
+# build works fine through emulation.
 CURATED_VOICES = {
+    # English (US)
     "Amy (US, medium)": "en/en_US/amy/medium/en_US-amy-medium",
-    "Lessac (US, medium)": "en/en_US/lessac/medium/en_US-lessac-medium",
+    "Lessac (US, high)": "en/en_US/lessac/high/en_US-lessac-high",
     "Ryan (US, high)": "en/en_US/ryan/high/en_US-ryan-high",
+    "Joe (US, medium)": "en/en_US/joe/medium/en_US-joe-medium",
+    "Kristin (US, medium)": "en/en_US/kristin/medium/en_US-kristin-medium",
+    "Bryce (US, medium)": "en/en_US/bryce/medium/en_US-bryce-medium",
+    "John (US, medium)": "en/en_US/john/medium/en_US-john-medium",
+    "Norman (US, medium)": "en/en_US/norman/medium/en_US-norman-medium",
+    "HFC Female (US, medium)": "en/en_US/hfc_female/medium/en_US-hfc_female-medium",
+    "HFC Male (US, medium)": "en/en_US/hfc_male/medium/en_US-hfc_male-medium",
+    "Sam (US, medium)": "en/en_US/sam/medium/en_US-sam-medium",
+    "Danny (US, low)": "en/en_US/danny/low/en_US-danny-low",
+    # English (UK)
     "Alan (UK, medium)": "en/en_GB/alan/medium/en_GB-alan-medium",
+    "Alba (UK, medium)": "en/en_GB/alba/medium/en_GB-alba-medium",
+    "Cori (UK, high)": "en/en_GB/cori/high/en_GB-cori-high",
+    "Jenny (UK, medium)": "en/en_GB/jenny_dioco/medium/en_GB-jenny_dioco-medium",
+    "Northern English Male (UK, medium)": "en/en_GB/northern_english_male/medium/en_GB-northern_english_male-medium",
+    "Southern English Female (UK, low)": "en/en_GB/southern_english_female/low/en_GB-southern_english_female-low",
+    # Other languages
+    "Davefx (Spanish, medium)": "es/es_ES/davefx/medium/es_ES-davefx-medium",
+    "Sharvard (Spanish, medium)": "es/es_ES/sharvard/medium/es_ES-sharvard-medium",
+    "Siwis (French, medium)": "fr/fr_FR/siwis/medium/fr_FR-siwis-medium",
+    "Tom (French, medium)": "fr/fr_FR/tom/medium/fr_FR-tom-medium",
+    "Thorsten (German, high)": "de/de_DE/thorsten/high/de_DE-thorsten-high",
+    "Kerstin (German, low)": "de/de_DE/kerstin/low/de_DE-kerstin-low",
+    "Paola (Italian, medium)": "it/it_IT/paola/medium/it_IT-paola-medium",
+    "Faber (Portuguese, medium)": "pt/pt_BR/faber/medium/pt_BR-faber-medium",
+    "Ronnie (Dutch, medium)": "nl/nl_NL/ronnie/medium/nl_NL-ronnie-medium",
+    "Irina (Russian, medium)": "ru/ru_RU/irina/medium/ru_RU-irina-medium",
+    "Ruslan (Russian, medium)": "ru/ru_RU/ruslan/medium/ru_RU-ruslan-medium",
+    "Huayan (Chinese, medium)": "zh/zh_CN/huayan/medium/zh_CN-huayan-medium",
 }
 HF_BASE = "https://huggingface.co/rhasspy/piper-voices/resolve/main"
 
@@ -47,6 +77,23 @@ def list_installed_voices():
 
 def is_voice_installed(voice_id):
     return os.path.isfile(os.path.join(VOICES_DIR, voice_id + ".onnx"))
+
+
+def voice_size_bytes(voice_id):
+    total = 0
+    for ext in (".onnx", ".onnx.json"):
+        path = os.path.join(VOICES_DIR, voice_id + ext)
+        if os.path.isfile(path):
+            total += os.path.getsize(path)
+    return total
+
+
+def delete_voice(voice_id):
+    """Removes a downloaded voice's model and config files, freeing the space they used."""
+    for ext in (".onnx", ".onnx.json"):
+        path = os.path.join(VOICES_DIR, voice_id + ext)
+        if os.path.isfile(path):
+            os.remove(path)
 
 
 def download_voice(voice_key, progress_cb=None):
