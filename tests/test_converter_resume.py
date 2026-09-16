@@ -97,6 +97,34 @@ def test_ignores_resume_state_when_text_changed(tk_root, tmp_path, monkeypatch):
     assert len(calls) == len(chunks), "a text mismatch must fall back to synthesizing every chunk"
 
 
+def test_failed_conversion_cleans_up_scratch_files(tk_root, tmp_path, monkeypatch):
+    """If every chunk fails, _convert_one raises instead of producing a file -- that's a
+    definitive failure, not an interruption, so the scratch state left behind must be
+    cleaned up rather than orphaned in the Conversions folder forever."""
+    converter, calls = _make_converter(tk_root, tmp_path, monkeypatch)
+
+    def always_fails(self, chunk_text, chunk_path, use_piper, settings):
+        raise RuntimeError("synthesis engine exploded")
+
+    monkeypatch.setattr(Converter.Converter, "_synthesize_chunk", always_fails)
+
+    text = "Sentence number one. " * 200
+    chunks = TextChunking.split_into_chunks(text)
+
+    out_dir = tmp_path / "out"
+    os.makedirs(out_dir, exist_ok=True)
+    output_file = str(out_dir / "book.wav")
+
+    import pytest
+    with pytest.raises(ValueError, match="No audio could be generated"):
+        converter._convert_one("book.txt", chunks, output_file, text, False, Config.load(), 0, len(chunks), time.time())
+
+    assert not os.path.isfile(output_file)
+    assert not os.path.isfile(output_file + ".progress.json")
+    assert not os.path.isfile(output_file + ".partial.pcm")
+    assert not os.path.isfile(output_file + ".partial")
+
+
 def test_fresh_conversion_leaves_no_resume_scratch_files(tk_root, tmp_path, monkeypatch):
     converter, calls = _make_converter(tk_root, tmp_path, monkeypatch)
 

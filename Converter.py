@@ -188,48 +188,62 @@ class Converter:
         chunk_scratch = os.path.join(tmp_dir, "chunk.wav")
 
         try:
-            log_every = max(1, total // 10)
-            for i in range(start_index, total):
-                if self._cancel_event.is_set():
-                    self.logger.add_event("warn", f"Conversion cancelled: '{os.path.basename(file)}'")
-                    self._events.put(("skipped", file, "Cancelled"))
-                    return global_done  # progress/pcm scratch files are left in place on purpose, for next time
+            try:
+                log_every = max(1, total // 10)
+                for i in range(start_index, total):
+                    if self._cancel_event.is_set():
+                        self.logger.add_event("warn", f"Conversion cancelled: '{os.path.basename(file)}'")
+                        self._events.put(("skipped", file, "Cancelled"))
+                        return global_done  # progress/pcm scratch files are left in place on purpose, for next time
 
-                try:
-                    self._synthesize_chunk(chunks[i], chunk_scratch, resume_use_piper, resume_settings)
-                    with wave.open(chunk_scratch, "rb") as chunk_wav:
-                        if not wav_info:
-                            wav_info = {
-                                "nchannels": chunk_wav.getnchannels(), "sampwidth": chunk_wav.getsampwidth(),
-                                "framerate": chunk_wav.getframerate(),
-                            }
-                        frames = chunk_wav.readframes(chunk_wav.getnframes())
-                    with open(pcm_path, "ab") as pcm_file:
-                        pcm_file.write(frames)
-                except Exception as chunk_error:
-                    # Skip a bad or timed-out chunk rather than losing every chunk already
-                    # synthesized, or hanging the whole app on one stuck section.
-                    self.logger.add_event(
-                        "warn", f"Skipped one section of '{os.path.basename(file)}'", str(chunk_error)
+                    try:
+                        self._synthesize_chunk(chunks[i], chunk_scratch, resume_use_piper, resume_settings)
+                        with wave.open(chunk_scratch, "rb") as chunk_wav:
+                            if not wav_info:
+                                wav_info = {
+                                    "nchannels": chunk_wav.getnchannels(), "sampwidth": chunk_wav.getsampwidth(),
+                                    "framerate": chunk_wav.getframerate(),
+                                }
+                            frames = chunk_wav.readframes(chunk_wav.getnframes())
+                        with open(pcm_path, "ab") as pcm_file:
+                            pcm_file.write(frames)
+                    except Exception as chunk_error:
+                        # Skip a bad or timed-out chunk rather than losing every chunk already
+                        # synthesized, or hanging the whole app on one stuck section.
+                        self.logger.add_event(
+                            "warn", f"Skipped one section of '{os.path.basename(file)}'", str(chunk_error)
+                        )
+
+                    global_done += 1
+                    elapsed = time.time() - start_time
+                    self._events.put(("progress", file, i + 1, total, global_done, total_chunks, elapsed))
+                    if total > 1 and ((i + 1) % log_every == 0 or i + 1 == total):
+                        self.logger.add_event("info", f"Converting '{os.path.basename(file)}': {i + 1}/{total} sections")
+                    _save_resume_state(
+                        progress_path, i + 1, total, text_hash, resume_use_piper, resume_settings.get("voice"), wav_info
                     )
 
-                global_done += 1
-                elapsed = time.time() - start_time
-                self._events.put(("progress", file, i + 1, total, global_done, total_chunks, elapsed))
-                if total > 1 and ((i + 1) % log_every == 0 or i + 1 == total):
-                    self.logger.add_event("info", f"Converting '{os.path.basename(file)}': {i + 1}/{total} sections")
-                _save_resume_state(progress_path, i + 1, total, text_hash, resume_use_piper, resume_settings.get("voice"), wav_info)
+                if not os.path.isfile(pcm_path) or os.path.getsize(pcm_path) == 0:
+                    raise ValueError("No audio could be generated for this file")
 
-            if not os.path.isfile(pcm_path) or os.path.getsize(pcm_path) == 0:
-                raise ValueError("No audio could be generated for this file")
-
-            partial_path = output_file + ".partial"
-            with open(pcm_path, "rb") as pcm_file, wave.open(partial_path, "wb") as out:
-                out.setnchannels(wav_info["nchannels"])
-                out.setsampwidth(wav_info["sampwidth"])
-                out.setframerate(wav_info["framerate"])
-                out.writeframes(pcm_file.read())
-            os.replace(partial_path, output_file)  # atomic: the library never sees a half-written file
+                partial_path = output_file + ".partial"
+                with open(pcm_path, "rb") as pcm_file, wave.open(partial_path, "wb") as out:
+                    out.setnchannels(wav_info["nchannels"])
+                    out.setsampwidth(wav_info["sampwidth"])
+                    out.setframerate(wav_info["framerate"])
+                    out.writeframes(pcm_file.read())
+                os.replace(partial_path, output_file)  # atomic: the library never sees a half-written file
+            except Exception:
+                # A definitive failure, not an interrupted-but-resumable crash -- this file
+                # already ran to completion and failed, so the scratch state isn't progress
+                # worth keeping. Left behind, it would just be orphaned clutter in the
+                # Conversions folder that a resume attempt would immediately fail again anyway.
+                for scratch_path in (progress_path, pcm_path, output_file + ".partial"):
+                    try:
+                        os.remove(scratch_path)
+                    except OSError:
+                        pass
+                raise
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
 

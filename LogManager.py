@@ -3,6 +3,8 @@ import logging.handlers
 import os
 import queue
 
+import ErrorReporter
+
 LOG_DIR = os.path.join(os.path.expanduser("~"), ".texttoaudio")
 LOG_FILE = os.path.join(LOG_DIR, "texttoaudio.log")
 
@@ -93,3 +95,5 @@ class LogManager:
         level = LEVELS.get(status.lower(), logging.INFO)
         full_message = f"{msg.strip()}" + (f" | {err.strip()}" if err and err.strip() else "")
         self.logger.log(level, full_message)
+        if status.lower() == "error":
+            ErrorReporter.report(msg, err)

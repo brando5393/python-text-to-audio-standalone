@@ -26,6 +26,8 @@ This started as a fork of [TiffinTech](https://github.com/TiffinTech)'s [python-
 - **Sound cues**: short tones for app-ready, conversion-done, error, and exit moments, useful when the window isn't in view; toggle them off in Settings if you'd rather not have them.
 - **Confirmations where they matter**: changing the save folder confirms the exact destination before committing to it, and quitting asks first; reset buttons for save folder, voice settings, appearance, or everything at once are in Settings.
 - **Logging**: a rotating log file at `~/.texttoaudio/texttoaudio.log`, plus a live, color-coded Activity Log panel in the app.
+- **Cleans up after itself**: a conversion that definitively fails (as opposed to one interrupted by closing the app, which stays resumable) removes its own partial/scratch files rather than leaving orphaned clutter behind in the Conversions folder.
+- **Auto error reporting** (developer builds only): an error opens a GitHub issue on this repo automatically, via the local `gh` CLI rather than a bundled credential, so it only does anything on a machine where the developer is already authenticated. Deduplicated so a recurring error only ever opens one issue.
 - **Auto-updates**: checks this repo's GitHub Releases for a newer version on startup, with an in-app banner to download and install it.
 
 ## System Requirements
@@ -117,6 +119,7 @@ Porting to macOS/Linux would mean swapping `AudioPlayer.py` for a cross-platform
 | `ConversionQueue.py` | Remembers an in-progress batch so it can auto-resume if the app closes before it finishes |
 | `AudioPlayer.py` | Playback controls via Windows MCI |
 | `LogManager.py` | Rotating file log and live on-screen log feed |
+| `ErrorReporter.py` | Auto-files a deduplicated GitHub issue for each distinct error, via the local `gh` CLI |
 
 ## Roadmap / Next Steps
 - **Native ARM64 Piper inference**: replace the emulated `piper.exe` subprocess with a pure-Python pipeline. `onnxruntime` (which does publish a native win-arm64 wheel) would run Piper's ONNX voice model directly, paired with a phonemizer that doesn't require `piper-phonemize`'s unavailable native extension. This would remove the roughly 2-hour-per-novel ceiling described in [Platform notes](#platform-notes) entirely, since the actual bottleneck is emulated ONNX inference, not process startup.

@@ -3,6 +3,7 @@ import logging
 import pytest
 import ttkbootstrap as ttk
 
+import ErrorReporter
 import LogManager
 
 
@@ -38,3 +39,12 @@ def isolated_logging(tmp_path, monkeypatch):
     for handler in logger.handlers:
         handler.close()
     logger.handlers = original_handlers
+
+
+@pytest.fixture(autouse=True)
+def no_real_error_reports(monkeypatch):
+    """LogManager.add_event() calls ErrorReporter.report() on every "error"-level event,
+    which shells out to the real `gh` CLI. Without this, any test that exercises an error
+    path would file a live GitHub issue using the developer's own authenticated `gh`
+    session -- tests that specifically exercise ErrorReporter re-patch it locally instead."""
+    monkeypatch.setattr(ErrorReporter, "report", lambda *a, **k: None)
