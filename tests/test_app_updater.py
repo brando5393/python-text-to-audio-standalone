@@ -11,7 +11,7 @@ def sample_release(tag, asset_name, digest=None):
         asset["digest"] = digest
     return json.dumps({
         "tag_name": tag,
-        "html_url": f"https://github.com/brando5393/python-text-to-audio-standalone/releases/tag/{tag}",
+        "html_url": f"https://github.com/brando5393/talebrew/releases/tag/{tag}",
         "assets": [asset],
     })
 

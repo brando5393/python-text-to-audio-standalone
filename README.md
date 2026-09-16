@@ -2,7 +2,7 @@
 
 # Talebrew
 
-[![Tests](https://github.com/brando5393/python-text-to-audio-standalone/actions/workflows/tests.yml/badge.svg)](https://github.com/brando5393/python-text-to-audio-standalone/actions/workflows/tests.yml)
+[![Tests](https://github.com/brando5393/talebrew/actions/workflows/tests.yml/badge.svg)](https://github.com/brando5393/talebrew/actions/workflows/tests.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](pyproject.toml)
 
@@ -45,7 +45,7 @@ The installer lands in `dist\Talebrew-<version>-win-arm64.msi` (or `-win-amd64` 
 1. Install Python 3.10+ from [python.org](https://www.python.org/downloads/)
 2. Clone this repository:
    ```
-   git clone https://github.com/brando5393/python-text-to-audio-standalone.git
+   git clone https://github.com/brando5393/talebrew.git
    ```
 3. Install dependencies with [Poetry](https://python-poetry.org/):
    ```

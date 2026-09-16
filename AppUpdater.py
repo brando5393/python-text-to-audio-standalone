@@ -24,7 +24,7 @@ from packaging.version import InvalidVersion, Version
 
 from version import __version__
 
-REPO = "brando5393/python-text-to-audio-standalone"
+REPO = "brando5393/talebrew"
 USER_AGENT = "Talebrew-AppUpdater"
 REQUEST_TIMEOUT_SECONDS = 5
 DOWNLOAD_TIMEOUT_SECONDS = 120
