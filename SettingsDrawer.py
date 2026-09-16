@@ -254,11 +254,65 @@ class SettingsDrawer(ttk.Frame):
             appearance, text="Dark", variable=self.appearance_var, value="dark", command=self._apply_appearance
         ).pack(anchor="w")
 
+        reset = ttk.Labelframe(parent, text="Reset", padding=10, bootstyle="danger")
+        reset.pack(fill="x", pady=(10, 0))
+        ttk.Button(
+            reset, text="↺ Reset Save Folder", command=self._reset_save_folder, bootstyle="secondary-outline"
+        ).pack(fill="x", pady=(0, 6))
+        ttk.Button(
+            reset, text="↺ Reset Voice Settings", command=self._reset_voice_settings, bootstyle="secondary-outline"
+        ).pack(fill="x", pady=(0, 6))
+        ttk.Button(
+            reset, text="↺ Reset Appearance", command=self._reset_appearance, bootstyle="secondary-outline"
+        ).pack(fill="x", pady=(0, 10))
+        ttk.Button(reset, text="↺ Reset Everything", command=self._reset_everything, bootstyle="danger").pack(
+            fill="x"
+        )
+
     def _open_save_folder(self):
         try:
             os.startfile(self.explorer.download_directory)
         except Exception as e:
             self.logger.add_event("error", "Failed to open folder", str(e))
+
+    def _reset_save_folder(self):
+        if messagebox.askyesno("Reset Save Folder", "Reset the save folder back to the default Conversions folder?"):
+            self.explorer.reset_download_directory()
+
+    def _reset_voice_settings(self):
+        if messagebox.askyesno("Reset Voice Settings", "Reset engine, voice, speed, and expressiveness to defaults?"):
+            self._loading = True
+            Config.save(dict(Config.DEFAULTS))
+            self.engine_var.set(Config.DEFAULTS["engine"])
+            self._refresh_voice_list()
+            self.voice_var.set(Config.DEFAULTS["voice"])
+            self.speed_var.set(Config.DEFAULTS["speed"])
+            self.expr_var.set(Config.DEFAULTS["expressiveness"])
+            self._loading = False
+            self.logger.add_event("info", "Voice settings reset to defaults")
+
+    def _reset_appearance(self):
+        if messagebox.askyesno("Reset Appearance", "Switch back to the default light appearance?"):
+            self.appearance_var.set("light")
+            self._apply_appearance()
+
+    def _reset_everything(self):
+        if messagebox.askyesno(
+            "Reset Everything",
+            "Reset save folder, voice settings, and appearance all back to their defaults?",
+        ):
+            self.explorer.reset_download_directory()
+            self._loading = True
+            Config.save(dict(Config.DEFAULTS))
+            self.engine_var.set(Config.DEFAULTS["engine"])
+            self._refresh_voice_list()
+            self.voice_var.set(Config.DEFAULTS["voice"])
+            self.speed_var.set(Config.DEFAULTS["speed"])
+            self.expr_var.set(Config.DEFAULTS["expressiveness"])
+            self._loading = False
+            self.appearance_var.set("light")
+            self._apply_appearance()
+            self.logger.add_event("info", "All settings reset to defaults")
 
     def _apply_appearance(self):
         self.on_theme_change(self.appearance_var.get() == "dark")

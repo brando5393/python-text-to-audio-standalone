@@ -1,5 +1,5 @@
 import os
-from tkinter import filedialog, simpledialog
+from tkinter import filedialog, messagebox, simpledialog
 
 import LogManager as logger
 import TextExtraction
@@ -74,13 +74,25 @@ class FileManager:
         """Specify a new directory where audio files will be placed after conversion."""
         try:
             new_download_directory = filedialog.askdirectory(initialdir=self.download_directory)
-            if new_download_directory:
-                self.download_directory = new_download_directory
-                self._refresh_directory_label()
-            else:
+            if not new_download_directory:
                 self.logger.add_event("warn", "No directory selected for download")
+                return
+            confirmed = messagebox.askyesno(
+                "Change Save Folder", f"Save converted files to:\n\n{new_download_directory}\n\nfrom now on?"
+            )
+            if not confirmed:
+                self.logger.add_event("warn", "Save folder change cancelled")
+                return
+            self.download_directory = new_download_directory
+            self._refresh_directory_label()
         except Exception as e:
             self.logger.add_event("error", "Failed to set download directory", str(e))
+
+    def reset_download_directory(self):
+        """Resets the save destination back to the Conversions root."""
+        self.download_directory = CONVERSIONS_ROOT
+        self._refresh_directory_label()
+        self.logger.add_event("info", "Save folder reset to default")
 
     def create_subfolder(self):
         """Creates a new named folder under the Conversions root (e.g. 'Books', 'Podcasts')
