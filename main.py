@@ -12,8 +12,9 @@ import Config
 import ConversionQueue
 import Converter
 import FileManager
+import PlaybackMemory
 import SoundEffects
-from AudioPlayer import AudioPlayer
+from AudioPlayer import AudioPlayer, wav_duration_ms
 from ConversionsLibrary import ConversionsLibrary
 from LogManager import LogManager
 from MiniPlayer import MiniPlayer
@@ -224,10 +225,53 @@ def play_selected_audio(_event=None):
     if kind != "file":
         return
     try:
+        resume_position_ms = _resolve_resume_position(path)
         player.play(path)
+        if resume_position_ms:
+            player.seek_ms(resume_position_ms)
         now_playing_var.set(f"Now playing: {path.split(chr(92))[-1]}")
     except Exception as e:
         logger.add_event("error", "Failed to play audio file", str(e))
+
+
+def _resolve_resume_position(path):
+    """Offers to resume from where playback last left off on this file, if it's worth
+    asking about -- not right at the start, and not close enough to the end that it was
+    effectively already finished. Checked via the file's own WAV header rather than
+    opening it for playback first, so nothing plays before the user has decided."""
+    saved_ms = PlaybackMemory.get_position(path)
+    if not PlaybackMemory.is_resumable(saved_ms, wav_duration_ms(path)):
+        return 0
+    minutes, seconds = divmod(saved_ms // 1000, 60)
+    resume = messagebox.askyesno(
+        "Resume Playback", f"You were {minutes}:{seconds:02d} into this file last time.\n\nResume from there?",
+    )
+    return saved_ms if resume else 0
+
+
+def restart_playback():
+    """Jumps back to the beginning of whatever is currently loaded, regardless of any
+    saved resume position -- for when you want to hear a file from the start on purpose."""
+    if player.current_path():
+        player.seek_ms(0)
+
+
+def track_playback_position():
+    """Keeps the saved position for the currently playing file up to date, so closing
+    the app (or it crashing) doesn't lose more than a few seconds of progress. Also
+    detects a file finishing naturally (stopped, at/near the end) and clears its saved
+    position, so a finished file starts fresh next time instead of "resuming" at 100%.
+    """
+    path = player.current_path()
+    if path:
+        if player.is_playing():
+            PlaybackMemory.save_position(path, player.position_ms())
+        else:
+            length = player.length_ms()
+            position = player.position_ms()
+            if length and position >= length - PlaybackMemory.RESUME_EDGE_MS:
+                PlaybackMemory.clear_position(path)
+    app.after(5000, track_playback_position)
 
 
 def reconvert_selected():
@@ -267,12 +311,18 @@ def reconvert_selected():
 
 def toggle_pause():
     if player.is_playing():
+        path = player.current_path()
+        if path:
+            PlaybackMemory.save_position(path, player.position_ms())
         player.pause()
     else:
         player.resume()
 
 
 def stop_playback():
+    path = player.current_path()
+    if path:
+        PlaybackMemory.save_position(path, player.position_ms())
     player.stop()
     now_playing_var.set("Nothing playing")
 
@@ -373,10 +423,14 @@ pause_btn = ttk.Button(player_frame, text="▶ Play / Pause", command=toggle_pau
 stop_playback_btn = ttk.Button(player_frame, text="■ Stop", command=stop_playback, bootstyle="danger-outline")
 pause_btn.grid(row=1, column=0, sticky="ew", padx=(0, 4))
 stop_playback_btn.grid(row=1, column=1, sticky="ew", padx=(4, 0))
+restart_btn = ttk.Button(
+    player_frame, text="⟲ Start Over", command=restart_playback, bootstyle="secondary-outline"
+)
+restart_btn.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
 mini_player_btn = ttk.Button(
     player_frame, text="⤡ Mini Player", command=lambda: enter_mini_mode(), bootstyle="secondary-outline"
 )
-mini_player_btn.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+mini_player_btn.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(6, 0))
 player_frame.columnconfigure(0, weight=1)
 player_frame.columnconfigure(1, weight=1)
 
@@ -451,6 +505,7 @@ logger.add_event("info", "Application started successfully")
 SoundEffects.play("ready")
 app.after(300, poll_conversions)
 app.after(2000, update_banner.check_in_background)  # delayed so it never slows down launch
+app.after(5000, track_playback_position)
 
 pending_batch = ConversionQueue.load()
 if pending_batch:

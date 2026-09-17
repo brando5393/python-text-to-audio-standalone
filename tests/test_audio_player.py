@@ -1,4 +1,26 @@
-from AudioPlayer import AudioPlayer
+import wave
+
+from AudioPlayer import AudioPlayer, wav_duration_ms
+
+
+def test_wav_duration_ms_reads_real_file(tmp_path):
+    path = tmp_path / "sample.wav"
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(16000)
+        w.writeframes(b"\x00\x00" * 16000 * 2)  # 2 seconds of silence
+    assert wav_duration_ms(str(path)) == 2000
+
+
+def test_wav_duration_ms_returns_zero_for_missing_file():
+    assert wav_duration_ms(r"C:\does\not\exist.wav") == 0
+
+
+def test_wav_duration_ms_returns_zero_for_non_wav_file(tmp_path):
+    path = tmp_path / "not_a_wav.wav"
+    path.write_bytes(b"this is not a wav file")
+    assert wav_duration_ms(str(path)) == 0
 
 
 def test_current_path_is_none_before_playing():

@@ -1,7 +1,19 @@
 import ctypes
+import wave
 
 _winmm = ctypes.windll.winmm
 _ALIAS = "texttoaudio_player"
+
+
+def wav_duration_ms(path):
+    """Reads a WAV file's duration without opening it for playback -- used to decide
+    whether a saved playback position is worth offering to resume from, before MCI is
+    ever involved. Returns 0 if the file can't be read as a WAV (wrong format, missing)."""
+    try:
+        with wave.open(path, "rb") as wav_file:
+            return int(1000 * wav_file.getnframes() / wav_file.getframerate())
+    except (wave.Error, OSError, ZeroDivisionError):
+        return 0
 
 
 class AudioPlayer:
