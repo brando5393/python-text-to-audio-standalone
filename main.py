@@ -5,19 +5,23 @@ import tempfile
 import threading
 import tkinter as tk
 import tkinter.font as tkfont
-from tkinter import messagebox
+from tkinter import messagebox, simpledialog
 
 import ttkbootstrap as ttk
 
 import AppIcon
 import AutoPauseMonitor
+import Bookmarks
 import Config
 import ConversionEstimate
 import ConversionQueue
 import Converter
 import FileManager
+import MediaKeys
 import PiperEngine
 import PlaybackMemory
+import PlaybackQueue
+import SleepTimer
 import SoundEffects
 import TextExtraction
 import TextSanitization
@@ -54,6 +58,8 @@ progress_dialog = None
 mini_player = None
 batch_had_error = False
 batch_had_done = False
+sleep_timer = SleepTimer.SleepTimer()
+media_key_hook = None
 
 
 def enter_mini_mode(persist=True):
@@ -61,7 +67,7 @@ def enter_mini_mode(persist=True):
     if mini_player is not None:
         return
     app.withdraw()
-    mini_player = MiniPlayer(app, player, now_playing_var, on_expand=exit_mini_mode)
+    mini_player = MiniPlayer(app, player, now_playing_var, on_expand=exit_mini_mode, sleep_timer=sleep_timer)
     if persist:
         current = Config.load()
         current["start_in_mini_mode"] = True
@@ -79,9 +85,17 @@ def exit_mini_mode():
     Config.save(current)
 
 
+def _release_media_keys():
+    global media_key_hook
+    if media_key_hook is not None:
+        media_key_hook.uninstall()
+        media_key_hook = None
+
+
 def confirm_quit():
     """Exits the app cleanly after yes/no prompt"""
     if messagebox.askyesno(title="Close Application", message="Are you sure you want to quit?"):
+        _release_media_keys()
         player.stop()
         SoundEffects.play("exit", blocking=False)
         # Give the exit chime (~0.5s) a moment to actually play before the process ends --
@@ -94,6 +108,7 @@ def quit_for_update():
     "Update Now", so asking "are you sure you want to quit?" right after would be a
     redundant, confusing second prompt. The installer needs Talebrew closed to safely
     overwrite its files, so this doesn't play the exit chime or delay for it either."""
+    _release_media_keys()
     player.stop()
     app.destroy()
 
@@ -347,13 +362,10 @@ def poll_conversions():
     app.after(300, poll_conversions)
 
 
-def play_selected_audio(_event=None):
-    selection = library_tree.selection()
-    if not selection:
-        return
-    path, kind = library.path_for(selection[0])
-    if kind != "file":
-        return
+def _play_path(path):
+    """Starts playback of `path` from its resume position (if any). Shared by
+    double-clicking a Conversions Library row and the queue's Next/Previous/auto-play
+    advance, so all three stay behaviorally identical."""
     try:
         resume_position_ms = _resolve_resume_position(path)
         player.play(path)
@@ -362,6 +374,32 @@ def play_selected_audio(_event=None):
         now_playing_var.set(f"Now playing: {path.split(chr(92))[-1]}")
     except Exception as e:
         logger.add_event("error", "Failed to play audio file", str(e))
+
+
+def play_selected_audio(_event=None):
+    selection = library_tree.selection()
+    if not selection:
+        return
+    path, kind = library.path_for(selection[0])
+    if kind != "file":
+        return
+    _play_path(path)
+
+
+def play_next():
+    """Advances to the next file in the Conversions Library's current display order,
+    used by both the manual Next button and auto-play-on-finish (see
+    track_playback_position). No-op at the end of the queue -- see PlaybackQueue.py."""
+    target = PlaybackQueue.next_file(player.current_path(), library.ordered_file_paths())
+    if target:
+        _play_path(target)
+
+
+def play_previous():
+    """Jumps to the previous file in the Conversions Library's current display order."""
+    target = PlaybackQueue.previous_file(player.current_path(), library.ordered_file_paths())
+    if target:
+        _play_path(target)
 
 
 def _resolve_resume_position(path):
@@ -386,21 +424,32 @@ def restart_playback():
         player.seek_ms(0)
 
 
+_finished_handled_for = None  # last path whose "finished naturally" logic already ran,
+# so a still-loaded-but-stopped finished file doesn't re-trigger auto-play every poll.
+
+
 def track_playback_position():
     """Keeps the saved position for the currently playing file up to date, so closing
     the app (or it crashing) doesn't lose more than a few seconds of progress. Also
     detects a file finishing naturally (stopped, at/near the end) and clears its saved
-    position, so a finished file starts fresh next time instead of "resuming" at 100%.
+    position, so a finished file starts fresh next time instead of "resuming" at 100%
+    -- and, if "Auto-play next" is on, advances to the next file in the queue.
     """
+    global _finished_handled_for
     path = player.current_path()
     if path:
         if player.is_playing():
             PlaybackMemory.save_position(path, player.position_ms())
+            _finished_handled_for = None
         else:
             length = player.length_ms()
             position = player.position_ms()
             if length and position >= length - PlaybackMemory.RESUME_EDGE_MS:
-                PlaybackMemory.clear_position(path)
+                if _finished_handled_for != path:
+                    _finished_handled_for = path
+                    PlaybackMemory.clear_position(path)
+                    if auto_play_var.get():
+                        play_next()
     app.after(5000, track_playback_position)
 
 
@@ -457,6 +506,98 @@ def stop_playback():
     now_playing_var.set("Nothing playing")
     player_progress_var.set(0)
     player_time_var.set("0:00 / 0:00")
+
+
+# Sleep timer: pauses playback (never stops it -- preserves the resume position, just
+# like a real audiobook/podcast app's sleep timer) after a chosen duration. The actual
+# expiry check lives in SleepTimer.py as a small, plainly-testable class; this is only
+# the Tk-facing wiring (a preset dropdown + a 1s countdown tick via app.after()).
+def on_sleep_timer_choice(_event=None):
+    minutes = SleepTimer.MINUTES_BY_LABEL.get(sleep_timer_choice_var.get(), 0)
+    if minutes <= 0:
+        sleep_timer.cancel()
+    else:
+        sleep_timer.start(minutes)
+        logger.add_event("info", f"Sleep timer set for {minutes} minutes")
+
+
+def tick_sleep_timer():
+    if sleep_timer.is_active():
+        if sleep_timer.is_expired():
+            sleep_timer.cancel()
+            sleep_timer_choice_var.set(SleepTimer.LABELS_BY_MINUTES[0])
+            if player.is_playing():
+                toggle_pause()  # pause, not stop -- keeps the resume position
+                logger.add_event("info", "Sleep timer expired -- playback paused")
+        else:
+            sleep_timer_choice_var.set(f"Sleep: {sleep_timer.remaining_minutes_label()} min left")
+    app.after(1000, tick_sleep_timer)
+
+
+# Bookmarks: multiple named markers per file, distinct from PlaybackMemory's single
+# silent auto-resume position -- these are only ever created/removed on purpose.
+def add_bookmark_at_current_position():
+    path = player.current_path()
+    if not path:
+        logger.add_event("warn", "Nothing playing to bookmark")
+        return
+    name = simpledialog.askstring("Add Bookmark", "Name this bookmark:", parent=app)
+    if not name:
+        return
+    Bookmarks.add_bookmark(path, name, player.position_ms())
+    logger.add_event("info", f"Bookmark '{name}' added at {format_time(player.position_ms())}")
+
+
+def open_bookmarks_dialog():
+    path = player.current_path()
+    if not path:
+        logger.add_event("warn", "Nothing playing -- no bookmarks to show")
+        return
+
+    dialog = ttk.Toplevel(app)
+    dialog.title("Bookmarks")
+    dialog.geometry("320x260")
+    AppIcon.apply(dialog)
+    frame = ttk.Frame(dialog, padding=10)
+    frame.pack(fill="both", expand=True)
+
+    listbox = styled_listbox(frame, height=10)
+    listbox.pack(fill="both", expand=True)
+
+    def refresh_entries():
+        listbox.delete(0, "end")
+        for entry in Bookmarks.list_bookmarks(path):
+            listbox.insert("end", f"{entry['name']} -- {format_time(entry['position_ms'])}")
+
+    def jump_to_selected():
+        selection = listbox.curselection()
+        if not selection:
+            return
+        entries = Bookmarks.list_bookmarks(path)
+        entry = entries[selection[0]]
+        player.seek_ms(entry["position_ms"])
+
+    def delete_selected():
+        selection = listbox.curselection()
+        if not selection:
+            return
+        entries = Bookmarks.list_bookmarks(path)
+        entry = entries[selection[0]]
+        Bookmarks.delete_bookmark(path, entry["id"])
+        refresh_entries()
+
+    button_row = ttk.Frame(frame)
+    button_row.pack(fill="x", pady=(8, 0))
+    ttk.Button(button_row, text="Jump", command=jump_to_selected, bootstyle="info-outline").pack(
+        side="left", fill="x", expand=True, padx=(0, 4)
+    )
+    ttk.Button(button_row, text="Delete", command=delete_selected, bootstyle="danger-outline").pack(
+        side="left", fill="x", expand=True, padx=(4, 0)
+    )
+    ttk.Button(frame, text="+ Add at Current Position", command=lambda: (add_bookmark_at_current_position(), refresh_entries()),
+               bootstyle="secondary-outline").pack(fill="x", pady=(6, 0))
+
+    refresh_entries()
 
 
 # Elapsed/total time + seek bar for the currently playing file, shown right in the main
@@ -643,6 +784,38 @@ mini_player_btn = ttk.Button(
     player_frame, text="⤡ Mini Player", command=lambda: enter_mini_mode(), bootstyle="secondary-outline"
 )
 mini_player_btn.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+
+# Queue/playlist: Next/Previous walk the Conversions Library's current display order
+# (see ConversionsLibrary.ordered_file_paths / PlaybackQueue.py); "Auto-play next"
+# defaults ON, matching how a real audiobook/podcast app plays a library continuously
+# rather than stopping after every single file -- off is one click away for anyone
+# who'd rather choose each file manually.
+prev_btn = ttk.Button(player_frame, text="⏮ Prev", command=play_previous, bootstyle="secondary-outline")
+next_btn = ttk.Button(player_frame, text="⏭ Next", command=play_next, bootstyle="secondary-outline")
+prev_btn.grid(row=6, column=0, sticky="ew", padx=(0, 4), pady=(6, 0))
+next_btn.grid(row=6, column=1, sticky="ew", padx=(4, 0), pady=(6, 0))
+
+auto_play_var = tk.BooleanVar(value=True)
+auto_play_check = ttk.Checkbutton(
+    player_frame, text="Auto-play next", variable=auto_play_var, bootstyle="round-toggle",
+)
+auto_play_check.grid(row=7, column=0, columnspan=2, sticky="w", pady=(6, 0))
+
+bookmarks_btn = ttk.Button(
+    player_frame, text="🔖 Bookmarks", command=open_bookmarks_dialog, bootstyle="secondary-outline"
+)
+bookmarks_btn.grid(row=8, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+
+# Sleep timer: pauses (never stops) playback after the chosen duration -- see
+# tick_sleep_timer()/SleepTimer.py above. Relabels itself with the remaining time
+# while active instead of needing a separate status label.
+sleep_timer_choice_var = tk.StringVar(value=SleepTimer.LABELS_BY_MINUTES[0])
+sleep_timer_menu = ttk.Combobox(
+    player_frame, textvariable=sleep_timer_choice_var, state="readonly", values=SleepTimer.CHOICES,
+)
+sleep_timer_menu.bind("<<ComboboxSelected>>", on_sleep_timer_choice)
+sleep_timer_menu.grid(row=9, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+
 player_frame.columnconfigure(0, weight=1, minsize=130)
 player_frame.columnconfigure(1, weight=1, minsize=90)
 
@@ -749,6 +922,34 @@ app.bind_all("<Control-q>", lambda _e: confirm_quit())
 file_list_display.bind("<Delete>", lambda _e: explorer.remove_file())
 library_tree.bind("<Return>", play_selected_audio)  # keyboard equivalent of the existing double-click
 
+# System media-key support (Play/Pause, Stop, Next, Previous) -- see MediaKeys.py for
+# why RegisterHotKey + a polled, message-only window was chosen over both
+# WM_APPCOMMAND (focused-window only) and directly subclassing Tk's own WNDPROC
+# (crashed the interpreter in real testing). Polled from poll_media_keys() below
+# rather than delivered via an OS callback. If a key is already claimed by another
+# running app (e.g. a media player), that one key is silently skipped rather than
+# failing the whole app -- logged here so it's visible, not silent, to whoever's
+# debugging it.
+def poll_media_keys():
+    if media_key_hook is not None:
+        media_key_hook.poll()
+    app.after(150, poll_media_keys)
+
+
+try:
+    media_key_hook = MediaKeys.MediaKeyHook(
+        lambda command: MediaKeys.dispatch(
+            command, {"play_pause": toggle_pause, "stop": stop_playback, "next": play_next, "previous": play_previous}
+        ),
+    )
+    _registered = media_key_hook.install()
+    if len(_registered) < 4:
+        logger.add_event("warn", "Some media keys are already in use by another app", str(sorted(_registered)))
+    app.after(150, poll_media_keys)
+except Exception as e:
+    media_key_hook = None
+    logger.add_event("warn", "Could not register system media-key support", str(e))
+
 logger.add_event("info", "Application started successfully")
 SoundEffects.play("ready")
 app.after(300, poll_conversions)
@@ -756,6 +957,7 @@ app.after(2000, update_banner.check_in_background)  # delayed so it never slows 
 app.after(5000, track_playback_position)
 app.after(300, poll_file_info)
 app.after(500, update_player_progress)
+app.after(1000, tick_sleep_timer)
 
 pending_batch = ConversionQueue.load()
 if pending_batch:

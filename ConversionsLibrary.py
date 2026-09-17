@@ -102,6 +102,24 @@ class ConversionsLibrary:
         except (OSError, json.JSONDecodeError):
             return {}  # No sidecar -- likely converted before this feature existed.
 
+    def ordered_file_paths(self):
+        """Returns every converted file's path, flattened in the tree's current
+        display order (folders depth-first, files within each folder alphabetically --
+        whatever _insert_dir actually produced), for queue/playlist "next"/"previous"
+        playback. Folders themselves are skipped; only playable files are included."""
+        paths = []
+
+        def walk(parent_id):
+            for item_id in self.tree.get_children(parent_id):
+                path, kind = self._item_data.get(item_id, (None, None))
+                if kind == "file":
+                    paths.append(path)
+                elif kind == "dir":
+                    walk(item_id)
+
+        walk("")
+        return paths
+
     def path_for(self, item_id):
         """Returns (path, kind) for a tree item, where kind is 'dir' or 'file'."""
         return self._item_data.get(item_id, (None, None))

@@ -3,8 +3,10 @@ import tkinter as tk
 import ttkbootstrap as ttk
 
 import AppIcon
+import SleepTimer
 
 PROGRESS_POLL_MS = 500
+SLEEP_TIMER_TICK_MS = 1000
 
 
 def format_time(ms):
@@ -17,7 +19,7 @@ class MiniPlayer(ttk.Toplevel):
     """A small, always-on-top playback-only window -- for keeping Talebrew out of the
     way while listening, without losing access to play/pause/stop/seek."""
 
-    def __init__(self, parent, player, now_playing_var, on_expand):
+    def __init__(self, parent, player, now_playing_var, on_expand, sleep_timer=None):
         super().__init__(parent)
         self.title("Talebrew Mini Player")
         AppIcon.apply(self)
@@ -25,6 +27,12 @@ class MiniPlayer(ttk.Toplevel):
         self.attributes("-topmost", True)
         self.player = player
         self.on_expand = on_expand
+        # Shares the main window's SleepTimer instance (passed in by main.py) so a
+        # timer started from one window is reflected in the other -- both windows
+        # control the same single playback session, so their sleep timers must too.
+        # Falls back to a private instance so this class stays constructible on its
+        # own, e.g. from tests that don't wire up a shared timer.
+        self.sleep_timer = sleep_timer if sleep_timer is not None else SleepTimer.SleepTimer()
         self.protocol("WM_DELETE_WINDOW", on_expand)  # closing the mini player returns to the full window
         self._dragging = False
 
@@ -62,6 +70,13 @@ class MiniPlayer(ttk.Toplevel):
             fill="x", pady=(6, 0)
         )
 
+        self.sleep_timer_choice_var = tk.StringVar(value=SleepTimer.LABELS_BY_MINUTES[0])
+        self.sleep_timer_menu = ttk.Combobox(
+            frame, textvariable=self.sleep_timer_choice_var, state="readonly", values=SleepTimer.CHOICES,
+        )
+        self.sleep_timer_menu.bind("<<ComboboxSelected>>", self._on_sleep_timer_choice)
+        self.sleep_timer_menu.pack(fill="x", pady=(6, 0))
+
         # Sized to its own actual content rather than a hardcoded guess -- a fixed
         # literal here previously drifted out of sync with what got added to the frame
         # over time (the seek bar and time readout ended up needing more height than the
@@ -73,6 +88,26 @@ class MiniPlayer(ttk.Toplevel):
         self.geometry(f"{self.winfo_reqwidth()}x{self.winfo_reqheight()}")
 
         self.after(PROGRESS_POLL_MS, self._update_progress)
+        self.after(SLEEP_TIMER_TICK_MS, self._tick_sleep_timer)
+
+    def _on_sleep_timer_choice(self, _event=None):
+        minutes = SleepTimer.MINUTES_BY_LABEL.get(self.sleep_timer_choice_var.get(), 0)
+        if minutes <= 0:
+            self.sleep_timer.cancel()
+        else:
+            self.sleep_timer.start(minutes)
+
+    def _tick_sleep_timer(self):
+        if self.sleep_timer.is_active():
+            if self.sleep_timer.is_expired():
+                self.sleep_timer.cancel()
+                self.sleep_timer_choice_var.set(SleepTimer.LABELS_BY_MINUTES[0])
+                if self.player.is_playing():
+                    self.player.pause()  # pause, not stop -- keeps the resume position
+            else:
+                self.sleep_timer_choice_var.set(f"Sleep: {self.sleep_timer.remaining_minutes_label()} min left")
+        if self.winfo_exists():
+            self.after(SLEEP_TIMER_TICK_MS, self._tick_sleep_timer)
 
     def _toggle_pause(self):
         if self.player.is_playing():
