@@ -141,3 +141,64 @@ def test_fresh_conversion_leaves_no_resume_scratch_files(tk_root, tmp_path, monk
     assert os.path.isfile(output_file)
     assert not os.path.isfile(output_file + ".progress.json")
     assert not os.path.isfile(output_file + ".partial.pcm")
+
+
+def test_ignores_resume_state_when_total_chunks_mismatches_re_extracted_document(tk_root, tmp_path, monkeypatch):
+    """If the same source text now splits into a different number of chunks than the
+    interrupted attempt recorded (e.g. the chunking algorithm changed between app
+    versions, or a different code path produced a different split), the saved chunk
+    index no longer lines up with the current chunk list at all -- resuming would
+    resynthesize the wrong chunks or skip real ones, so it must start over instead."""
+    converter, calls = _make_converter(tk_root, tmp_path, monkeypatch)
+
+    text = "Sentence number one. " * 200
+    chunks = TextChunking.split_into_chunks(text)
+    assert len(chunks) >= 2
+    text_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+    out_dir = tmp_path / "out"
+    os.makedirs(out_dir, exist_ok=True)
+    output_file = str(out_dir / "book.wav")
+    # Same text hash, but a total_chunks count that doesn't match len(chunks) at all.
+    _seed_resume_state(tmp_path, output_file, completed_chunks=1, total_chunks=len(chunks) + 5, text_hash=text_hash)
+
+    converter._convert_one("book.txt", chunks, output_file, text, False, Config.load(), 0, len(chunks), time.time())
+
+    assert len(calls) == len(chunks), "a total_chunks mismatch must fall back to synthesizing every chunk"
+
+
+def test_load_resume_state_returns_none_for_corrupted_progress_json(tmp_path):
+    """A progress.json truncated or corrupted by a crash mid-write (before the atomic
+    os.replace in _save_resume_state) must be treated as "no usable resume state", not
+    raise and crash the whole conversion."""
+    progress_path = str(tmp_path / "book.wav.progress.json")
+    pcm_path = str(tmp_path / "book.wav.partial.pcm")
+    with open(pcm_path, "wb") as f:
+        f.write(b"\x00\x00")
+    with open(progress_path, "w", encoding="utf-8") as f:
+        f.write("{not valid json at all")
+
+    result = Converter._load_resume_state(progress_path, pcm_path, "some-hash", 10)
+    assert result is None
+
+
+def test_load_resume_state_returns_none_when_pcm_scratch_file_is_missing(tmp_path):
+    """A progress.json can exist without its matching .partial.pcm (e.g. the pcm file
+    was deleted by hand, or a previous run's cleanup step ran partway). Without the
+    actual audio data to resume, the checkpoint alone is useless and must be ignored."""
+    progress_path = str(tmp_path / "book.wav.progress.json")
+    pcm_path = str(tmp_path / "book.wav.partial.pcm")  # deliberately never created
+    with open(progress_path, "w", encoding="utf-8") as f:
+        json.dump({"completed_chunks": 3, "total_chunks": 10, "text_hash": "abc"}, f)
+
+    result = Converter._load_resume_state(progress_path, pcm_path, "abc", 10)
+    assert result is None
+
+
+def test_save_resume_state_survives_unwritable_progress_path(tmp_path):
+    """If the progress.json can't be written (e.g. its parent directory was removed out
+    from under a long-running conversion), losing that one checkpoint must not raise and
+    kill the whole conversion -- the next chunk just tries to checkpoint again."""
+    missing_dir_path = str(tmp_path / "does_not_exist" / "book.wav.progress.json")
+    Converter._save_resume_state(missing_dir_path, 1, 10, "hash", False, None, {})  # must not raise
+    assert not os.path.isfile(missing_dir_path)
