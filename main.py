@@ -21,6 +21,7 @@ import SoundEffects
 import TextExtraction
 import TextSanitization
 from AudioPlayer import AudioPlayer, wav_duration_ms
+import LogManager as LogManagerModule
 from ConversionsLibrary import ConversionsLibrary
 from LogManager import LogManager
 from MiniPlayer import MiniPlayer
@@ -132,6 +133,7 @@ def set_dark_mode(dark):
     restyle_listbox(app_log_display)
     apply_background(dark)
     explorer.set_dark_mode(dark)
+    LogManagerModule.set_dark_mode(dark)
 
 
 BASE_NAMED_FONT_SIZES = {"TkDefaultFont": 9, "TkTextFont": 9, "TkHeadingFont": 10, "TkMenuFont": 9}
