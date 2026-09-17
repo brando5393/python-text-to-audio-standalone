@@ -62,11 +62,22 @@
   html { -webkit-text-size-adjust: 100%; }
   body {
     margin: 0;
-    background: var(--bg) var(--wood) repeat;
+    background: var(--bg);
     color: var(--fg);
     font-family: 'Inter', system-ui, -apple-system, "Segoe UI", sans-serif;
     line-height: 1.6;
     font-size: 16px;
+    position: relative;
+  }
+  /* A fixed, viewport-covering pseudo-element instead of `background-attachment:
+     fixed` on body directly -- iOS Safari treats that as `scroll` regardless (a known
+     platform quirk), while a plain `position: fixed` element works reliably everywhere. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background: var(--wood) no-repeat center / cover;
   }
   h1, h2, h3 {
     font-family: 'Lora', 'Palatino Linotype', Georgia, serif;
@@ -175,7 +186,7 @@
 
   /* ---------- Get it ---------- */
   section.get {
-    background: var(--paper) var(--wood) repeat; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
     padding-block: 60px; text-align: center;
   }
   section.get h2 { font-size: 2rem; margin-bottom: 10px; }
