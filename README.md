@@ -8,6 +8,8 @@
 
 *Every story, brewed aloud.*
 
+**[Website &rarr;](https://brando5393.github.io/talebrew/)** &mdash; download page and feature overview.
+
 A Windows desktop app that converts text, PDF, and ebook files into audio, using either
 your system's built-in voice or a natural-sounding offline neural voice ([Piper](https://github.com/rhasspy/piper)).
 
