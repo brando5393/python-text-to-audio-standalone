@@ -1,16 +1,75 @@
+import time
 import wave
 
+import numpy as np
+import pytest
+
+import AudioPlayer as AudioPlayer_module
 from AudioPlayer import AudioPlayer, wav_duration_ms
 
 
-def test_wav_duration_ms_reads_real_file(tmp_path):
-    path = tmp_path / "sample.wav"
+class FakeOutputStream:
+    """Stands in for sounddevice.OutputStream so tests never touch real audio hardware
+    -- required for this to run headless on GitHub's windows-latest CI runner, which has
+    no real output device. Records enough (started/closed, the callback given to it) for
+    tests to drive playback deterministically by calling AudioPlayer._audio_callback
+    directly, the same way PortAudio's own audio thread would."""
+
+    instances = []
+
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+        self.callback = kwargs.get("callback")
+        self.started = False
+        self.closed = False
+        FakeOutputStream.instances.append(self)
+
+    def start(self):
+        self.started = True
+
+    def stop(self):
+        self.started = False
+
+    def close(self):
+        self.closed = True
+
+
+@pytest.fixture(autouse=True)
+def fake_stream(monkeypatch):
+    FakeOutputStream.instances.clear()
+    monkeypatch.setattr(AudioPlayer_module.sd, "OutputStream", FakeOutputStream)
+    yield
+
+
+def _make_wav(path, seconds=1.0, rate=8000, channels=1, freq=440.0):
+    n = int(seconds * rate)
+    t = np.arange(n) / rate
+    tone = (0.3 * np.sin(2 * np.pi * freq * t) * 32767).astype(np.int16)
+    if channels > 1:
+        tone = np.tile(tone[:, None], (1, channels))
     with wave.open(str(path), "wb") as w:
-        w.setnchannels(1)
+        w.setnchannels(channels)
         w.setsampwidth(2)
-        w.setframerate(16000)
-        w.writeframes(b"\x00\x00" * 16000 * 2)  # 2 seconds of silence
-    assert wav_duration_ms(str(path)) == 2000
+        w.setframerate(rate)
+        w.writeframes(tone.tobytes())
+    return str(path)
+
+
+def _wait_until(predicate, timeout=3.0):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.02)
+    return predicate()
+
+
+# -- wav_duration_ms (unchanged behavior from the MCI-era player) --------------------
+
+
+def test_wav_duration_ms_reads_real_file(tmp_path):
+    path = _make_wav(tmp_path / "sample.wav", seconds=2.0, rate=16000)
+    assert wav_duration_ms(path) == 2000
 
 
 def test_wav_duration_ms_returns_zero_for_missing_file():
@@ -23,27 +82,7 @@ def test_wav_duration_ms_returns_zero_for_non_wav_file(tmp_path):
     assert wav_duration_ms(str(path)) == 0
 
 
-def test_two_players_use_independent_mci_aliases(monkeypatch):
-    """Regression: a second AudioPlayer instance (e.g. for previewing a voice in
-    Settings) must not share the main player's MCI alias, or opening a file in one
-    would silently steal control of (and stop) whatever the other had open."""
-    commands = []
-
-    def fake_send(self, command):
-        commands.append(command)
-        return 0, ""
-
-    monkeypatch.setattr(AudioPlayer, "_send", fake_send)
-
-    main_player = AudioPlayer()
-    preview_player = AudioPlayer(alias="texttoaudio_preview")
-    main_player.play(r"C:\main.wav")
-    preview_player.play(r"C:\preview.mp3")
-
-    assert any("alias texttoaudio_player" in c for c in commands)
-    assert any("alias texttoaudio_preview" in c for c in commands)
-    assert main_player.current_path() == r"C:\main.wav"
-    assert preview_player.current_path() == r"C:\preview.mp3"
+# -- basic transport ------------------------------------------------------------------
 
 
 def test_current_path_is_none_before_playing():
@@ -51,98 +90,196 @@ def test_current_path_is_none_before_playing():
     assert player.current_path() is None
 
 
-def test_current_path_reflects_internal_state(monkeypatch):
+def test_play_sets_current_path_and_reports_length(tmp_path):
+    path = _make_wav(tmp_path / "book.wav", seconds=1.0, rate=8000)
     player = AudioPlayer()
-    monkeypatch.setattr(player, "_send", lambda command: (0, ""))
-    player.play(r"C:\some\file.wav")
-    assert player.current_path() == r"C:\some\file.wav"
+    player.play(path)
+    try:
+        assert player.current_path() == path
+        assert player.length_ms() == 1000
+        assert player.is_playing() is True
+    finally:
+        player.stop()
+
+
+def test_stop_clears_current_path(tmp_path):
+    path = _make_wav(tmp_path / "book.wav")
+    player = AudioPlayer()
+    player.play(path)
     player.stop()
     assert player.current_path() is None
+    assert player.is_playing() is False
 
 
-def test_pause_resume_seek_are_no_ops_when_nothing_is_loaded(monkeypatch):
-    """Regression: pause/resume/seek must not send any MCI command at all before play()
-    has ever been called -- sending one against an alias with nothing open would just
-    return a harmless MCI error, but doing so unconditionally (e.g. from a stray
-    keyboard-shortcut handler firing before a file is loaded) is still worth guarding
-    against explicitly, since it's cheap to verify and easy to silently regress."""
-    commands = []
+def test_pause_stops_the_stream_and_resume_restarts_it(tmp_path):
+    path = _make_wav(tmp_path / "book.wav")
     player = AudioPlayer()
-    monkeypatch.setattr(player, "_send", lambda command: (commands.append(command), (0, ""))[1])
+    player.play(path)
+    try:
+        stream = FakeOutputStream.instances[-1]
+        assert stream.started is True
+        player.pause()
+        assert stream.started is False
+        assert player.is_playing() is False
+        player.resume()
+        assert stream.started is True
+        assert player.is_playing() is True
+    finally:
+        player.stop()
 
+
+def test_pause_resume_seek_are_no_ops_when_nothing_is_loaded():
+    player = AudioPlayer()
     player.pause()
     player.resume()
     player.seek_ms(5000)
-
-    assert commands == []
-
-
-def test_is_playing_position_and_length_are_zero_when_nothing_is_loaded(monkeypatch):
-    player = AudioPlayer()
-    monkeypatch.setattr(player, "_send", lambda command: (_ for _ in ()).throw(AssertionError("should not query MCI")))
-
     assert player.is_playing() is False
     assert player.position_ms() == 0
     assert player.length_ms() == 0
 
 
-def test_stop_on_one_player_does_not_touch_the_other_players_alias(monkeypatch):
-    """Regression: closing the main player must never send an MCI command against the
-    preview player's alias (or vice versa) -- the two-alias split exists specifically so
-    that stopping one can't silently steal control of, or close, the other."""
-    commands = []
+def test_seek_updates_reported_position(tmp_path):
+    path = _make_wav(tmp_path / "book.wav", seconds=4.0, rate=8000)
+    player = AudioPlayer()
+    player.play(path)
+    try:
+        player.seek_ms(2500)
+        assert player.position_ms() == 2500
+    finally:
+        player.stop()
 
-    def fake_send(self, command):
-        commands.append(command)
-        return 0, ""
 
-    monkeypatch.setattr(AudioPlayer, "_send", fake_send)
+def test_seek_resumes_playback_if_paused(tmp_path):
+    path = _make_wav(tmp_path / "book.wav", seconds=4.0, rate=8000)
+    player = AudioPlayer()
+    player.play(path)
+    player.pause()
+    assert player.is_playing() is False
+    player.seek_ms(1000)
+    assert player.is_playing() is True
+    player.stop()
+
+
+def test_play_raises_for_a_file_that_is_not_a_wav_or_recognized_audio_format(tmp_path):
+    bad = tmp_path / "bad.wav"
+    bad.write_bytes(b"not really audio")
+    player = AudioPlayer()
+    with pytest.raises(Exception):
+        player.play(str(bad))
+
+
+# -- speed / tone -----------------------------------------------------------------------
+
+
+def test_set_speed_clamps_to_supported_range():
+    player = AudioPlayer()
+    player.set_speed(10)
+    assert player.get_speed() == 2.5
+    player.set_speed(0.01)
+    assert player.get_speed() == 0.5
+
+
+def test_set_tone_clamps_to_supported_range():
+    player = AudioPlayer()
+    player.set_tone(30)
+    assert player.get_tone() == 6.0
+    player.set_tone(-30)
+    assert player.get_tone() == -6.0
+
+
+def test_default_speed_and_tone_are_neutral():
+    player = AudioPlayer()
+    assert player.get_speed() == 1.0
+    assert player.get_tone() == 0.0
+
+
+def test_set_speed_while_playing_resets_the_buffer_to_the_current_position(tmp_path):
+    """Regression: an in-progress speed/tone change must take effect immediately on
+    already-buffered-but-unheard audio, not only once it finishes playing -- so changing
+    it drops anything produced-but-not-yet-heard and restarts production from exactly
+    what's currently audible, using the new value."""
+    path = _make_wav(tmp_path / "book.wav", seconds=3.0, rate=8000)
+    player = AudioPlayer()
+    player.play(path)
+    try:
+        assert _wait_until(lambda: player._produced_output_frames > 0)
+        player.set_speed(1.8)
+        assert player.get_speed() == 1.8
+        assert player._produce_from == player._heard_source_frame
+        assert len(player._chunks) == 0
+    finally:
+        player.stop()
+
+
+def test_set_tone_while_playing_resets_the_buffer_to_the_current_position(tmp_path):
+    path = _make_wav(tmp_path / "book.wav", seconds=3.0, rate=8000)
+    player = AudioPlayer()
+    player.play(path)
+    try:
+        assert _wait_until(lambda: player._produced_output_frames > 0)
+        player.set_tone(4.0)
+        assert player.get_tone() == 4.0
+        assert player._produce_from == player._heard_source_frame
+        assert len(player._chunks) == 0
+    finally:
+        player.stop()
+
+
+def test_playback_produces_and_delivers_real_audio(tmp_path):
+    """End-to-end: the producer thread actually runs AudioStretch on real WAV samples
+    and the audio callback actually delivers non-silent frames -- not just that the
+    plumbing doesn't crash."""
+    path = _make_wav(tmp_path / "book.wav", seconds=2.0, rate=8000)
+    player = AudioPlayer()
+    player.play(path)
+    try:
+        assert _wait_until(lambda: player._produced_output_frames > 200)
+        outdata = np.zeros((200, 1), dtype=np.float32)
+        player._audio_callback(outdata, 200, None, None)
+        assert np.abs(outdata).max() > 0.0
+    finally:
+        player.stop()
+
+
+# -- multi-instance isolation (the property the MCI-alias split used to guarantee) ----
+
+
+def test_two_independent_players_do_not_share_state(tmp_path):
+    path_a = _make_wav(tmp_path / "a.wav", seconds=2.0, rate=8000)
+    path_b = _make_wav(tmp_path / "b.wav", seconds=3.0, rate=8000)
 
     main_player = AudioPlayer()
     preview_player = AudioPlayer(alias="texttoaudio_preview")
-    main_player.play(r"C:\main.wav")
-    preview_player.play(r"C:\preview.mp3")
-    commands.clear()
+    assert main_player._alias != preview_player._alias
 
-    main_player.stop()
+    main_player.play(path_a)
+    preview_player.play(path_b)
+    try:
+        assert main_player.current_path() == path_a
+        assert preview_player.current_path() == path_b
+        assert main_player.length_ms() == 2000
+        assert preview_player.length_ms() == 3000
 
-    assert any("texttoaudio_player" in c for c in commands)
-    assert not any("texttoaudio_preview" in c for c in commands)
-    assert preview_player.current_path() == r"C:\preview.mp3"  # untouched
+        main_player.set_speed(1.5)
+        assert preview_player.get_speed() == 1.0  # untouched by the other player
 
-
-def test_play_raises_on_mci_open_failure(monkeypatch):
-    """If MCI can't open the file at all (bad/missing device, corrupted file), play()
-    must surface that as a clear error instead of silently pretending playback started."""
-    player = AudioPlayer()
-    monkeypatch.setattr(player, "_send", lambda command: (277, "") if command.startswith("open") else (0, ""))
-
-    import pytest
-
-    with pytest.raises(RuntimeError, match="Could not open audio file"):
-        player.play(r"C:\bad.wav")
-    assert player.current_path() is None
+        main_player.stop()
+        assert main_player.current_path() is None
+        assert preview_player.current_path() == path_b  # untouched by stopping the other
+    finally:
+        preview_player.stop()
 
 
-def test_play_quotes_path_containing_spaces_in_the_mci_command(monkeypatch):
-    commands = []
-    player = AudioPlayer()
-    monkeypatch.setattr(player, "_send", lambda command: (commands.append(command), (0, ""))[1])
-
-    player.play(r"C:\My Books\a long title.wav")
-
-    open_cmd = next(c for c in commands if c.startswith("open"))
-    assert '"C:\\My Books\\a long title.wav"' in open_cmd
-
-
-def test_play_uses_mpegvideo_device_type_for_mp3_and_waveaudio_for_wav(monkeypatch):
-    commands = []
-    player = AudioPlayer()
-    monkeypatch.setattr(player, "_send", lambda command: (commands.append(command), (0, ""))[1])
-
-    player.play(r"C:\song.mp3")
-    assert "type mpegvideo" in next(c for c in commands if c.startswith("open"))
-
-    commands.clear()
-    player.play(r"C:\book.wav")
-    assert "type waveaudio" in next(c for c in commands if c.startswith("open"))
+def test_two_players_get_independent_output_streams(tmp_path):
+    path_a = _make_wav(tmp_path / "a.wav")
+    path_b = _make_wav(tmp_path / "b.wav")
+    main_player = AudioPlayer()
+    preview_player = AudioPlayer(alias="texttoaudio_preview")
+    main_player.play(path_a)
+    preview_player.play(path_b)
+    try:
+        assert len(FakeOutputStream.instances) == 2
+        assert FakeOutputStream.instances[0] is not FakeOutputStream.instances[1]
+    finally:
+        main_player.stop()
+        preview_player.stop()

@@ -6,7 +6,11 @@ authors = ["Brandon Williams"]
 package-mode = false
 
 [tool.poetry.dependencies]
-python = ">=3.10,<3.16"
+# Raised from 3.10 to 3.12: numpy only started publishing win_arm64 wheels (this
+# project targets Windows on ARM64, per Converter.py's own comments about running under
+# x64 emulation) at numpy 2.5, which requires Python >=3.12. numpy/sounddevice/soundfile
+# are needed for AudioPlayer's live playback speed/tone control -- see AudioStretch.py.
+python = ">=3.12,<3.16"
 pyttsx3 = "^2.90"
 ttkbootstrap = "^2.2.3"
 ebooklib = "^0.20"
@@ -17,6 +21,9 @@ striprtf = "^0.0.33"
 packaging = "^26.3"
 pypdf = "^6.18.1"
 ftfy = "^6.3.1"
+sounddevice = "^0.5.1"
+numpy = "^2.5.0"
+soundfile = "^0.13.1"
 
 [tool.poetry.group.dev.dependencies]
 cx-freeze = "^8.7.0"

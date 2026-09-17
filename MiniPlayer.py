@@ -3,6 +3,7 @@ import tkinter as tk
 import ttkbootstrap as ttk
 
 import AppIcon
+import PlaybackControls
 
 PROGRESS_POLL_MS = 500
 
@@ -20,7 +21,7 @@ class MiniPlayer(ttk.Toplevel):
     def __init__(self, parent, player, now_playing_var, on_expand):
         super().__init__(parent)
         self.title("Talebrew Mini Player")
-        self.geometry("300x170")
+        self.geometry("300x260")
         AppIcon.apply(self)
         self.resizable(False, False)
         self.attributes("-topmost", True)
@@ -62,6 +63,11 @@ class MiniPlayer(ttk.Toplevel):
         ttk.Button(frame, text="⤢ Show Full App", command=on_expand, bootstyle="secondary-outline").pack(
             fill="x", pady=(6, 0)
         )
+
+        # Speed/Tone: live playback controls, mirroring the main window's Playback
+        # panel -- both just call the same shared AudioPlayer, so a change made in
+        # either window takes effect immediately regardless of which one is open.
+        PlaybackControls.build(frame, player).pack(fill="x", pady=(10, 0))
 
         self.after(PROGRESS_POLL_MS, self._update_progress)
 
