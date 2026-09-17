@@ -151,6 +151,8 @@ def apply_text_scale(large):
             pass
     title_label.configure(font=("Palatino Linotype", 21 + delta, "bold"))
     app_log_display.configure(font=("Consolas", 9 + delta))
+    library.sync_row_height()  # named fonts alone don't resize a Treeview's fixed
+    # per-theme row height -- see ConversionsLibrary.sync_row_height()
 
 
 def toggle_settings_drawer():

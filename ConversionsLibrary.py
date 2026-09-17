@@ -1,6 +1,8 @@
 import json
 import os
 import tkinter as tk
+import tkinter.font as tkfont
+from tkinter import ttk
 
 _ICONS_DIR = os.path.join(os.path.dirname(__file__), "assets", "icons")
 
@@ -24,11 +26,32 @@ class ConversionsLibrary:
         self.tree.column("chapters", width=70, anchor="w", stretch=False)
         self.tree.column("voice", width=130, anchor="w", stretch=False)
 
+        # A ttk Treeview's row height is a fixed pixel number the theme computes once
+        # from the font's metrics at setup time -- it does *not* re-derive itself if the
+        # font is resized afterward (confirmed directly: toggling "Larger text" grew the
+        # named font but left every row exactly as tall as before, cramming bigger glyphs
+        # into unchanged rows). Capturing the gap between the two here, while the font is
+        # still at its un-scaled base size, lets sync_row_height() re-apply that same gap
+        # on top of whatever size the font is later resized to.
+        style = ttk.Style()
+        base_rowheight = style.lookup("Treeview", "rowheight") or 20
+        base_linespace = tkfont.nametofont("TkDefaultFont").metrics("linespace")
+        self._row_padding = int(base_rowheight) - base_linespace
+
         # Tk PhotoImage objects must stay referenced or Tk garbage-collects them and the
         # Treeview rows silently lose their icons -- kept alive on self for the widget's lifetime.
         self._folder_icon = self._load_icon("folder.png")
         self._audio_icon = self._load_icon("audio.png")
         self.refresh()
+
+    def sync_row_height(self):
+        """Re-applies the Treeview's row-height padding on top of the current
+        TkDefaultFont size. Call this any time that font's size changes (see
+        main.py's apply_text_scale), or "Larger text" mode leaves rows too short
+        for their own enlarged text."""
+        style = ttk.Style()
+        linespace = tkfont.nametofont("TkDefaultFont").metrics("linespace")
+        style.configure("Treeview", rowheight=linespace + self._row_padding)
 
     @staticmethod
     def _load_icon(filename):
