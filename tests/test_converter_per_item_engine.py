@@ -46,7 +46,7 @@ def _make_converter(tk_root, tmp_path, monkeypatch, **config_overrides):
     return Converter.Converter(tk.Listbox(tk_root))
 
 
-def test_different_files_in_same_batch_use_different_engines(tk_root, tmp_path, monkeypatch):
+def test_different_files_in_same_batch_use_different_engines(tk_root, tmp_path, monkeypatch, requires_pyttsx3_voice):
     converter = _make_converter(tk_root, tmp_path, monkeypatch, engine="pyttsx3", voice="en_US-amy-medium")
 
     system_src = tmp_path / "system_voice_doc.txt"
@@ -101,7 +101,7 @@ def test_item_with_no_override_falls_back_to_global_settings(tk_root, tmp_path, 
     assert sidecar["voice_id"] == "en_US-amy-medium"
 
 
-def test_plain_path_string_behaves_like_no_override(tk_root, tmp_path, monkeypatch):
+def test_plain_path_string_behaves_like_no_override(tk_root, tmp_path, monkeypatch, requires_pyttsx3_voice):
     """Backward compatibility: re-convert and batch-resume both pass plain path strings,
     not dicts -- these must keep working exactly as before, using the global settings."""
     converter = _make_converter(tk_root, tmp_path, monkeypatch, engine="pyttsx3")

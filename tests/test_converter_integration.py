@@ -21,7 +21,7 @@ def _wait_for_all_done(converter, timeout=20):
     raise TimeoutError(f"Conversion did not finish within {timeout}s. Events so far: {events}")
 
 
-def test_converts_txt_file_to_wav(tk_root, tmp_path, monkeypatch):
+def test_converts_txt_file_to_wav(tk_root, tmp_path, monkeypatch, requires_pyttsx3_voice):
     monkeypatch.setattr(Config, "CONFIG_PATH", str(tmp_path / "config.json"))
     Config.save({**Config.DEFAULTS, "engine": "pyttsx3"})
 

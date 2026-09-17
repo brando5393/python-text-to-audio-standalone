@@ -54,7 +54,7 @@ def _run_with_collected_logs(fn):
     return handler.messages
 
 
-def test_falls_back_and_warns_when_piper_engine_not_installed(tk_root, tmp_path, monkeypatch):
+def test_falls_back_and_warns_when_piper_engine_not_installed(tk_root, tmp_path, monkeypatch, requires_pyttsx3_voice):
     monkeypatch.setattr(Config, "CONFIG_PATH", str(tmp_path / "config.json"))
     monkeypatch.setattr(PiperEngine, "PIPER_EXE", str(tmp_path / "no_engine" / "piper.exe"))
     Config.save({**Config.DEFAULTS, "engine": "piper", "voice": "en_US-amy-medium"})
@@ -82,7 +82,7 @@ def test_falls_back_and_warns_when_piper_engine_not_installed(tk_root, tmp_path,
     assert any("engine isn't installed" in m for m in messages)
 
 
-def test_falls_back_and_warns_when_selected_voice_not_installed(tk_root, tmp_path, monkeypatch):
+def test_falls_back_and_warns_when_selected_voice_not_installed(tk_root, tmp_path, monkeypatch, requires_pyttsx3_voice):
     monkeypatch.setattr(Config, "CONFIG_PATH", str(tmp_path / "config.json"))
     monkeypatch.setattr(PiperEngine, "VOICES_DIR", str(tmp_path / "no_voices"))
     # Simulate the engine being installed (skip the real 21MB download in a test).

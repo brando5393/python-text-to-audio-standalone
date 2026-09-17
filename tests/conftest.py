@@ -41,6 +41,25 @@ def isolated_logging(tmp_path, monkeypatch):
     logger.handlers = original_handlers
 
 
+def _pyttsx3_voice_available():
+    try:
+        import pyttsx3
+        return bool(pyttsx3.init().getProperty("voices"))
+    except Exception:
+        return False
+
+
+@pytest.fixture(scope="session")
+def requires_pyttsx3_voice():
+    """Skips a test that needs pyttsx3 to actually produce audio, on an environment
+    with no SAPI voice registered at all -- observed on GitHub's windows-latest CI
+    runner, not on a real Windows install (every real target machine for this app
+    ships at least one SAPI voice by default). This is an environment gap, not an
+    application bug: skipping is the correct response, not a false failure."""
+    if not _pyttsx3_voice_available():
+        pytest.skip("No SAPI voice registered in this environment")
+
+
 @pytest.fixture(autouse=True)
 def no_real_error_reports(monkeypatch):
     """LogManager.add_event() calls ErrorReporter.report() on every "error"-level event,
