@@ -99,9 +99,12 @@ def _wood_grain(size, base, grain_color, seed, knots=True):
 
     grain = np.clip(0.82 * rings + 0.18 * noise, 0, 1)
 
-    # Blend base -> grain_color using `grain` as the mix factor, kept subtle (max ~24%
-    # toward grain_color) so it reads as texture, not a color change.
-    strength = 0.24
+    # Blend base -> grain_color using `grain` as the mix factor, kept subtle so it
+    # reads as texture, not a color change. The app's calm (knots=False) variant is a
+    # touch stronger than the site's, since it's only ever seen through narrow gaps --
+    # at the same low strength as the site's large open canvas it would be nearly
+    # invisible in that much less screen real estate.
+    strength = 0.24 if knots else 0.32
     out = np.empty((height, width, 3), dtype=np.float64)
     for c in range(3):
         out[:, :, c] = base[c] + (grain_color[c] - base[c]) * grain * strength
@@ -131,6 +134,11 @@ def _make_site_background(filename, base_color, grain_color, seed, size=(1920, 1
 if __name__ == "__main__":
     _apply_to_existing("background-light.png", CREAM, CARAMEL, seed=1)
     _apply_to_existing("background-dark.png", DARK_ROAST, ESPRESSO, seed=2)
-    _make_site_background("wood-light.webp", CREAM, CARAMEL, seed=1)
-    _make_site_background("wood-dark.webp", DARK_ROAST, ESPRESSO, seed=2)
-    print("Wrote app backgrounds and docs/assets/wood-{light,dark}.webp")
+    # Filenames carry a version suffix, bumped by hand whenever this script changes --
+    # browsers cache images aggressively, and a same-named file update can sit stale in
+    # a visitor's cache indefinitely (confirmed happening in practice: the live server
+    # was already serving the new bytes under the old name while a browser kept showing
+    # the previous version). A new filename forces every browser to actually refetch it.
+    _make_site_background("wood-light-v2.webp", CREAM, CARAMEL, seed=1)
+    _make_site_background("wood-dark-v2.webp", DARK_ROAST, ESPRESSO, seed=2)
+    print("Wrote app backgrounds and docs/assets/wood-{light,dark}-v2.webp")

@@ -654,7 +654,7 @@ app.columnconfigure(0, weight=1)
 app.rowconfigure(1, weight=1)
 
 header_block = ttk.Frame(app)
-header_block.grid(row=0, column=0, sticky="w", padx=20, pady=(16, 10))
+header_block.grid(row=0, column=0, sticky="w", padx=24, pady=(16, 10))
 title_label = ttk.Label(header_block, text="Talebrew", font=("Palatino Linotype", 21, "bold"))
 title_label.pack(anchor="w")
 ttk.Label(
@@ -662,7 +662,7 @@ ttk.Label(
 ).pack(anchor="w")
 
 settings_toggle_btn = ttk.Button(app, text="⚙ Settings", command=toggle_settings_drawer, bootstyle="secondary-outline")
-settings_toggle_btn.grid(row=0, column=0, sticky="e", padx=(0, 20), pady=(18, 10))
+settings_toggle_btn.grid(row=0, column=0, sticky="e", padx=(0, 24), pady=(18, 10))
 
 # Everything below the header lives inside a scrollable canvas, not gridded straight onto
 # `app`. Two things this buys, neither of which a plain fixed grid can do on its own:
@@ -677,12 +677,12 @@ scroll_canvas = tk.Canvas(app, borderwidth=0, highlightthickness=0)
 scroll_vscrollbar = ttk.Scrollbar(app, orient="vertical", command=scroll_canvas.yview, bootstyle="round")
 scroll_hscrollbar = ttk.Scrollbar(app, orient="horizontal", command=scroll_canvas.xview, bootstyle="round")
 scroll_canvas.configure(yscrollcommand=scroll_vscrollbar.set, xscrollcommand=scroll_hscrollbar.set)
-scroll_canvas.grid(row=1, column=0, sticky="nsew", padx=(20, 0), pady=(0, 0))
+scroll_canvas.grid(row=1, column=0, sticky="nsew", padx=(24, 0), pady=(0, 0))
 scroll_vscrollbar.grid(row=1, column=1, sticky="ns", padx=(0, 4))
-scroll_hscrollbar.grid(row=2, column=0, sticky="ew", padx=(20, 0), pady=(2, 0))
+scroll_hscrollbar.grid(row=2, column=0, sticky="ew", padx=(24, 0), pady=(2, 0))
 app.columnconfigure(1, weight=0)
 
-content_frame = ttk.Frame(scroll_canvas, padding=(0, 8, 20, 16))
+content_frame = ttk.Frame(scroll_canvas, padding=(0, 8, 24, 16))
 content_window = scroll_canvas.create_window((0, 0), window=content_frame, anchor="nw")
 
 
@@ -986,12 +986,15 @@ def apply_layout_tier(tier):
 
     if tier == ResponsiveLayout.WIDE:
         # The original side-by-side arrangement: Files | Library | Actions-over-Playback,
-        # with the Settings drawer docked as a slim 4th column.
-        files_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 8), pady=8)
-        library_frame.grid(row=0, column=1, sticky="nsew", padx=8, pady=8)
-        actions_column.grid(row=0, column=2, sticky="new", padx=8, pady=8)
-        drawer_wrapper.grid(row=0, column=3, sticky="nsew", padx=(8, 0), pady=8)
-        log_frame.grid(row=1, column=0, columnspan=4, sticky="nsew", pady=(0, 8))
+        # with the Settings drawer docked as a slim 4th column. Gaps here are wide
+        # enough (24px, not a token 8px sliver) that the decorative wood-grain
+        # background behind everything actually reads as a table between the panels,
+        # rather than a barely-visible crack only in the dead center of the window.
+        files_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 24), pady=24)
+        library_frame.grid(row=0, column=1, sticky="nsew", padx=24, pady=24)
+        actions_column.grid(row=0, column=2, sticky="new", padx=24, pady=24)
+        drawer_wrapper.grid(row=0, column=3, sticky="nsew", padx=(24, 0), pady=24)
+        log_frame.grid(row=1, column=0, columnspan=4, sticky="nsew", padx=0, pady=(0, 24))
         bottom_bar.grid(row=2, column=0, columnspan=4, sticky="ew")
         content_frame.grid_columnconfigure(0, weight=2, minsize=340)
         content_frame.grid_columnconfigure(1, weight=2, minsize=260)
@@ -1003,11 +1006,11 @@ def apply_layout_tier(tier):
         # Two columns: Files/Library share a row, Actions+Playback stacks full-width
         # below them, and the Settings drawer (when open) and the log stack below that --
         # there's no longer room for a 4th docked column at this width.
-        files_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 8), pady=8)
-        library_frame.grid(row=0, column=1, sticky="nsew", padx=(8, 0), pady=8)
-        actions_column.grid(row=1, column=0, columnspan=2, sticky="new", pady=(0, 8))
-        drawer_wrapper.grid(row=2, column=0, columnspan=2, sticky="nsew", pady=(0, 8))
-        log_frame.grid(row=3, column=0, columnspan=2, sticky="nsew", pady=(0, 8))
+        files_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 24), pady=24)
+        library_frame.grid(row=0, column=1, sticky="nsew", padx=(24, 0), pady=24)
+        actions_column.grid(row=1, column=0, columnspan=2, sticky="new", pady=(0, 24))
+        drawer_wrapper.grid(row=2, column=0, columnspan=2, sticky="nsew", pady=(0, 24))
+        log_frame.grid(row=3, column=0, columnspan=2, sticky="nsew", pady=(0, 24))
         bottom_bar.grid(row=4, column=0, columnspan=2, sticky="ew")
         content_frame.grid_columnconfigure(0, weight=1, minsize=300)
         content_frame.grid_columnconfigure(1, weight=1, minsize=300)
@@ -1018,7 +1021,7 @@ def apply_layout_tier(tier):
         # is forced smaller than its own natural size -- the scroll_canvas above simply
         # grows taller than the window and scrolls, rather than clipping anything.
         for index, frame in enumerate(_MANAGED_FRAMES):
-            frame.grid(row=index, column=0, sticky="ew", pady=(0, 8))
+            frame.grid(row=index, column=0, sticky="ew", pady=(0, 16))
         content_frame.grid_columnconfigure(0, weight=1, minsize=260)
         # Files/Library get a comfortable minimum height (rather than weight=1, which
         # would stretch them to fill the whole remaining scroll area) since they're two
