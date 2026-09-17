@@ -44,6 +44,7 @@ This started as a fork of [TiffinTech](https://github.com/TiffinTech)'s [python-
 - **Cleans up after itself**: a conversion that definitively fails (as opposed to one interrupted by closing the app, which stays resumable) removes its own partial/scratch files rather than leaving orphaned clutter behind in the Conversions folder.
 - **Auto error reporting** (developer builds only): an error opens a GitHub issue on this repo automatically, via the local `gh` CLI rather than a bundled credential, so it only does anything on a machine where the developer is already authenticated. Deduplicated so a recurring error only ever opens one issue.
 - **Auto-updates**: checks this repo's GitHub Releases for a newer version on startup, with an in-app banner to download and install it.
+- **MCP server for AI agents**: an optional [Model Context Protocol](https://modelcontextprotocol.io/) server (`mcp_server.py`) lets Claude Desktop, Claude Code, or any other MCP client convert a file and check on it directly, without touching the GUI. See [MCP_SETUP.md](MCP_SETUP.md) for setup.
 
 ## System Requirements
 - Windows 10/11 (playback and the Piper engine use Windows-specific APIs; see [Platform notes](#platform-notes))
@@ -118,6 +119,7 @@ Porting to macOS/Linux would mean using Piper's Linux/macOS binaries directly (n
   ```
   CI (`.github/workflows/tests.yml`) runs the same suite on Windows against Python 3.12 and 3.13 on every push/PR to `main`. `AudioPlayer.py`'s tests mock `sounddevice.OutputStream`, since GitHub's `windows-latest` runner has no real audio output device.
 - Packaging and publishing a release (version bump, tag, what CI builds and attaches) is documented separately in [RELEASING.md](RELEASING.md).
+- Running the MCP server for AI-agent access (Claude Desktop, Claude Code) is documented separately in [MCP_SETUP.md](MCP_SETUP.md); it needs `poetry install --with mcp` first, since `mcp` is an optional dependency group, not part of the main install.
 - Contributions are welcome! Fork this repository, make your changes, and submit a pull request. For any major changes, please open an issue first to discuss the proposed changes. Please add or update tests and this README alongside any behavior change.
 
 ## Architecture
@@ -151,8 +153,10 @@ Porting to macOS/Linux would mean using Piper's Linux/macOS binaries directly (n
 | `Bookmarks.py` | Persists multiple named bookmarks per file to `~/.texttoaudio/bookmarks.json`, independent of `PlaybackMemory`'s single auto-resume position |
 | `SleepTimer.py` | Small, plainly-testable countdown class backing the Playback panel's sleep timer (pauses, never stops, playback once it expires) |
 | `MediaKeys.py` | Windows global multimedia hotkey support (Play/Pause/Stop/Next/Previous) via a polled, message-only window, plus the pure hotkey-id-to-command mapping used by it |
-| `LogManager.py` | Rotating file log and live on-screen log feed |
+| `LogManager.py` | Rotating file log and live on-screen log feed; also usable headless (`app_log_display=None`) with no Tk widget at all |
 | `ErrorReporter.py` | Auto-files a deduplicated GitHub issue for each distinct error, via the local `gh` CLI |
+| `mcp_server.py` | Optional [MCP](https://modelcontextprotocol.io/) server exposing conversion to AI agents (see [MCP_SETUP.md](MCP_SETUP.md)); runs `Converter`/`FileManager`/`Config` headlessly |
+| `JobStore.py` | Persists MCP conversion job status to `~/.texttoaudio/mcp_jobs.json`, so `get_conversion_status` works even across a server restart |
 
 ## Roadmap / Next Steps
 - **Native ARM64 Piper inference**: replace the emulated `piper.exe` subprocess with a pure-Python pipeline. `onnxruntime` (which does publish a native win-arm64 wheel) would run Piper's ONNX voice model directly, paired with a phonemizer that doesn't require `piper-phonemize`'s unavailable native extension. This would remove the roughly 2-hour-per-novel ceiling described in [Platform notes](#platform-notes) entirely, since the actual bottleneck is emulated ONNX inference, not process startup.

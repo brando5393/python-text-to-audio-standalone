@@ -184,6 +184,23 @@
   .feature h3 { font-size: 1.08rem; margin-bottom: 7px; }
   .feature p { margin: 0; font-size: 0.93rem; color: var(--fg-muted); }
 
+  /* ---------- AI agents ---------- */
+  section.agents { padding-block: 60px; }
+  section.agents h2 { text-align: center; font-size: 2rem; margin-bottom: 10px; }
+  section.agents > .wrap > p.sub { text-align: center; color: var(--fg-muted); max-width: 560px; margin: 0 auto 36px; }
+  .agent-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 30px 32px; max-width: 720px; margin: 0 auto;
+  }
+  .agent-tools { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px 20px; margin: 22px 0 26px; padding: 0; list-style: none; }
+  .agent-tools li { font-size: 0.9rem; color: var(--fg-muted); }
+  .agent-tools code {
+    display: block; margin-bottom: 3px; color: var(--fg); font-weight: 600;
+    background: var(--cream-soft); border-radius: 6px; padding: 3px 8px; font-size: 0.85em;
+  }
+  .agent-card p.lede { color: var(--fg-muted); margin: 0 0 4px; }
+  .agent-card .cta-row { justify-content: flex-start; margin-top: 20px; margin-bottom: 0; }
+
   /* ---------- Get it ---------- */
   section.get {
     border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
@@ -207,6 +224,7 @@
   @media (max-width: 720px) {
     .stats { grid-template-columns: repeat(2, 1fr); }
     .feature-grid { grid-template-columns: 1fr; }
+    .agent-tools { grid-template-columns: 1fr; }
     .nav-links { display: none; }
   }
 </style>
@@ -217,6 +235,7 @@
   <div class="brand"><img src="assets/logo.png" alt=""> Talebrew</div>
   <div class="nav-links">
     <a href="#features">Features</a>
+    <a href="#agents">AI agents</a>
     <a href="#get-it">Download</a>
     <a href="https://github.com/brando5393/talebrew">GitHub</a>
   </div>
@@ -296,6 +315,26 @@
         <p>Text is cleaned up before synthesis &mdash; headers, footers, page numbers, and OCR artifacts are stripped out. Larger-text and WCAG AA-checked contrast modes make the app itself easy to use, too.</p>
       </div>
 
+    </div>
+  </div>
+</section>
+
+<section class="agents" id="agents">
+  <div class="wrap">
+    <h2>Use with AI agents</h2>
+    <p class="sub">An optional MCP server lets Claude Desktop, Claude Code, or any other Model Context Protocol client convert files and check on them directly, no clicking through the GUI required.</p>
+    <div class="agent-card">
+      <p class="lede">Talebrew ships a headless <a href="https://modelcontextprotocol.io/" target="_blank" rel="noopener">MCP</a> server (<code>mcp_server.py</code>) exposing four tools:</p>
+      <ul class="agent-tools">
+        <li><code>list_supported_formats</code>See which file types Talebrew accepts.</li>
+        <li><code>convert_file</code>Start a conversion in the background; returns a job id immediately.</li>
+        <li><code>get_conversion_status</code>Check progress, completion, or failure for a job id.</li>
+        <li><code>list_conversions</code>Browse the Conversions library with pages/chapters/voice metadata.</li>
+      </ul>
+      <p class="lede">A conversation with your agent could look like: <em>"Convert ~/Documents/mybook.epub to audio using Piper, then let me know when it's done."</em></p>
+      <div class="cta-row">
+        <a class="btn btn-secondary" href="https://github.com/brando5393/talebrew/blob/main/MCP_SETUP.md">Read the setup guide &rarr;</a>
+      </div>
     </div>
   </div>
 </section>
