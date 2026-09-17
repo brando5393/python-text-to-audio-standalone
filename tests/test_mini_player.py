@@ -13,6 +13,8 @@ class FakePlayer:
         self._position = position
         self._length = length
         self._path = path
+        self.speed_calls = []
+        self.tone_calls = []
 
     def is_playing(self):
         return self.playing
@@ -41,6 +43,12 @@ class FakePlayer:
     def seek_ms(self, position_ms):
         self.seek_calls.append(position_ms)
         self._position = position_ms
+
+    def set_speed(self, multiplier):
+        self.speed_calls.append(multiplier)
+
+    def set_tone(self, semitones):
+        self.tone_calls.append(semitones)
 
 
 def test_mini_player_constructs_and_shows_now_playing(tk_root):

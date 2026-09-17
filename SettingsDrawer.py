@@ -11,33 +11,11 @@ import PiperEngine
 from AudioPlayer import AudioPlayer
 from version import __version__
 
-# Piper's own docs describe noise_scale (0.0-1.0+) as "generator noise" controlling vocal
-# variation, and length_scale as speaking rate; the app maps length_scale to a more
-# intuitive 0.5-2.0 "speed" (inverted: higher speed -> shorter length_scale -> faster
-# speech) with 1.0 as Piper's own natural-rate default. These bands turn the raw number
-# into a plain-language description next to each slider, since "0.83" alone doesn't tell
-# a listener anything about what they'll actually hear change.
-_SPEED_BANDS = [
-    (0.75, "Slower"),
-    (0.9, "Slightly slower"),
-    (1.1, "Normal"),
-    (1.5, "Slightly faster"),
-    (float("inf"), "Faster"),
-]
-_EXPRESSIVENESS_BANDS = [
-    (0.45, "Flat, monotone"),
-    (0.6, "Calm, steady"),
-    (0.75, "Balanced, natural"),
-    (0.9, "Expressive"),
-    (float("inf"), "Highly varied"),
-]
-
-
-def _band_label(value, bands):
-    for threshold, label in bands:
-        if value <= threshold:
-            return label
-    return bands[-1][1]
+# Speed and Tone used to live here as synthesis-time sliders (Piper's length_scale /
+# noise_scale). They're now live playback controls in the main window's and Mini
+# Player's Playback panels instead -- see AudioPlayer.set_speed()/set_tone() and
+# PLAYBACK_SPEED_BANDS/PLAYBACK_TONE_BANDS in PlaybackControls.py, which now owns the
+# plain-language-band helper this module used to define locally.
 
 
 class SettingsDrawer(ttk.Frame):
@@ -66,8 +44,6 @@ class SettingsDrawer(ttk.Frame):
 
         self.engine_var = tk.StringVar(value=self.settings["engine"])
         self.voice_var = tk.StringVar(value=self.settings["voice"])
-        self.speed_var = tk.DoubleVar(value=self.settings["speed"])
-        self.expr_var = tk.DoubleVar(value=self.settings["expressiveness"])
         self.large_text_var = tk.BooleanVar(value=self.settings["large_text"])
         self.sound_effects_var = tk.BooleanVar(value=self.settings["sound_effects_enabled"])
         self.auto_pause_var = tk.BooleanVar(value=self.settings["auto_pause_for_other_audio"])
@@ -86,7 +62,6 @@ class SettingsDrawer(ttk.Frame):
 
         self._build_engine_section(voice_tab)
         self._build_voice_section(voice_tab)
-        self._build_tuning_section(voice_tab)
         self._build_app_section(app_tab)
         self._build_accessibility_section(accessibility_tab)
 
@@ -94,7 +69,7 @@ class SettingsDrawer(ttk.Frame):
         self._loading = False
 
         for var in (
-            self.engine_var, self.voice_var, self.speed_var, self.expr_var,
+            self.engine_var, self.voice_var,
             self.large_text_var, self.sound_effects_var, self.auto_pause_var,
         ):
             var.trace_add("write", lambda *_args: self._save())
@@ -106,17 +81,15 @@ class SettingsDrawer(ttk.Frame):
 
         The drawer is created once and toggled visible/hidden rather than rebuilt, so
         without this its fields would go stale the moment anything outside the drawer
-        changes config.json -- and since all four fields save together, touching even
-        one unrelated control (e.g. the speed slider) would silently overwrite the
-        others back to those stale values. Called every time the drawer is opened.
+        changes config.json -- and since these fields save together, touching even
+        one unrelated control would silently overwrite the others back to those stale
+        values. Called every time the drawer is opened.
         """
         self._loading = True
         settings = Config.load()
         self.engine_var.set(settings["engine"])
         self._refresh_voice_list()
         self.voice_var.set(settings["voice"])
-        self.speed_var.set(settings["speed"])
-        self.expr_var.set(settings["expressiveness"])
         self.large_text_var.set(settings["large_text"])
         self.sound_effects_var.set(settings["sound_effects_enabled"])
         self.auto_pause_var.set(settings["auto_pause_for_other_audio"])
@@ -328,33 +301,6 @@ class SettingsDrawer(ttk.Frame):
         if self.winfo_exists():
             self.after(200, self._poll_downloads)
 
-    def _build_tuning_section(self, parent):
-        frame = ttk.Labelframe(parent, text="Tuning (Piper voices)", padding=10, bootstyle="primary")
-        frame.pack(fill="x", pady=(10, 0))
-
-        ttk.Label(frame, text="Speed").pack(anchor="w")
-        ttk.Scale(frame, variable=self.speed_var, from_=0.5, to=2.0, orient="horizontal").pack(fill="x")
-        self.speed_label_var = tk.StringVar()
-        ttk.Label(frame, textvariable=self.speed_label_var, bootstyle="secondary").pack(anchor="w")
-
-        ttk.Label(frame, text="Expressiveness").pack(anchor="w", pady=(8, 0))
-        ttk.Scale(frame, variable=self.expr_var, from_=0.3, to=1.0, orient="horizontal").pack(fill="x")
-        self.expr_label_var = tk.StringVar()
-        ttk.Label(frame, textvariable=self.expr_label_var, bootstyle="secondary").pack(anchor="w")
-
-        self.speed_var.trace_add("write", self._update_speed_label)
-        self.expr_var.trace_add("write", self._update_expr_label)
-        self._update_speed_label()
-        self._update_expr_label()
-
-    def _update_speed_label(self, *_args):
-        value = self.speed_var.get()
-        self.speed_label_var.set(f"{value:.2f}x ({_band_label(value, _SPEED_BANDS)})")
-
-    def _update_expr_label(self, *_args):
-        value = self.expr_var.get()
-        self.expr_label_var.set(f"{value:.2f} ({_band_label(value, _EXPRESSIVENESS_BANDS)})")
-
     def _save(self):
         # Merges onto the current settings on disk (rather than constructing a fixed
         # field list) so a setting the drawer doesn't manage -- like start_in_mini_mode,
@@ -368,8 +314,6 @@ class SettingsDrawer(ttk.Frame):
         current.update({
             "engine": self.engine_var.get(),
             "voice": self.voice_var.get(),
-            "speed": round(self.speed_var.get(), 2),
-            "expressiveness": round(self.expr_var.get(), 2),
             "large_text": self.large_text_var.get(),
             "sound_effects_enabled": self.sound_effects_var.get(),
             "auto_pause_for_other_audio": self.auto_pause_var.get(),
@@ -446,21 +390,17 @@ class SettingsDrawer(ttk.Frame):
             self.explorer.reset_download_directory()
 
     def _reset_voice_settings(self):
-        if messagebox.askyesno("Reset Voice Settings", "Reset engine, voice, speed, and expressiveness to defaults?"):
+        if messagebox.askyesno("Reset Voice Settings", "Reset engine and voice to defaults?"):
             self._loading = True
             current = Config.load()
             current.update({
                 "engine": Config.DEFAULTS["engine"],
                 "voice": Config.DEFAULTS["voice"],
-                "speed": Config.DEFAULTS["speed"],
-                "expressiveness": Config.DEFAULTS["expressiveness"],
             })
             Config.save(current)
             self.engine_var.set(Config.DEFAULTS["engine"])
             self._refresh_voice_list()
             self.voice_var.set(Config.DEFAULTS["voice"])
-            self.speed_var.set(Config.DEFAULTS["speed"])
-            self.expr_var.set(Config.DEFAULTS["expressiveness"])
             self._loading = False
             self.logger.add_event("info", "Voice settings reset to defaults")
 
@@ -475,8 +415,6 @@ class SettingsDrawer(ttk.Frame):
             self.engine_var.set(Config.DEFAULTS["engine"])
             self._refresh_voice_list()
             self.voice_var.set(Config.DEFAULTS["voice"])
-            self.speed_var.set(Config.DEFAULTS["speed"])
-            self.expr_var.set(Config.DEFAULTS["expressiveness"])
             self.large_text_var.set(Config.DEFAULTS["large_text"])
             self.on_text_scale_change(Config.DEFAULTS["large_text"])
             self.sound_effects_var.set(Config.DEFAULTS["sound_effects_enabled"])
@@ -551,7 +489,8 @@ their color, and a queued file with its own voice override is also labeled in te
 (e.g. "[Piper: Ryan]"), not just colored differently.
 - The "Larger text" toggle above scales UI text app-wide, including the Conversions Library \
 list's row height (a ttk Treeview doesn't resize that on its own when the font changes -- this \
-had to be handled explicitly), and speech rate is adjustable separately in the Voice tab.
+had to be handled explicitly). Speech speed and tone are adjustable live from the \
+Playback panel while something is playing, rather than from Settings.
 - Sound cues mark app-ready, conversion-done, error, and exit moments audibly, which helps if \
 the window isn't in view. Toggle them off above if you'd rather not have them.
 

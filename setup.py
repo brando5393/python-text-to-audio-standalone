@@ -14,7 +14,10 @@ from cx_Freeze import Executable, setup
 from version import __version__
 
 build_exe_options = {
-    "packages": ["tkinter", "ttkbootstrap", "pypdf", "pyttsx3", "ebooklib", "bs4", "mobi", "loguru", "ftfy"],
+    "packages": [
+        "tkinter", "ttkbootstrap", "pypdf", "pyttsx3", "ebooklib", "bs4", "mobi", "loguru", "ftfy",
+        "sounddevice", "numpy", "soundfile",
+    ],
     "excludes": ["test", "unittest"],
     "include_files": [("assets", "assets")],
 }

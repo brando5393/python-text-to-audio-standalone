@@ -8,12 +8,16 @@ on:
 
 jobs:
   test:
-    # Windows-only: the app itself is Windows-specific (MCI playback, Piper's Windows
-    # binary, pyttsx3/SAPI), so a Linux/macOS runner couldn't exercise any of it for real.
+    # Windows-only: the app itself is Windows-specific (sounddevice/PortAudio playback,
+    # Piper's Windows binary, pyttsx3/SAPI), so a Linux/macOS runner couldn't exercise
+    # any of it for real. windows-latest has no real audio output device, which is why
+    # AudioPlayer's tests mock sounddevice.OutputStream rather than needing one.
     runs-on: windows-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.12"]
+        # 3.10 dropped: numpy only publishes win_arm64 wheels from 2.5 onward, which
+        # requires Python >=3.12 -- see pyproject.toml's `python` constraint comment.
+        python-version: ["3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
 

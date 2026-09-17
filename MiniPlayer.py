@@ -3,6 +3,7 @@ import tkinter as tk
 import ttkbootstrap as ttk
 
 import AppIcon
+import PlaybackControls
 import SleepTimer
 
 PROGRESS_POLL_MS = 500
@@ -76,6 +77,11 @@ class MiniPlayer(ttk.Toplevel):
         )
         self.sleep_timer_menu.bind("<<ComboboxSelected>>", self._on_sleep_timer_choice)
         self.sleep_timer_menu.pack(fill="x", pady=(6, 0))
+
+        # Speed/Tone: live playback controls, mirroring the main window's Playback
+        # panel -- both just call the same shared AudioPlayer, so a change made in
+        # either window takes effect immediately regardless of which one is open.
+        PlaybackControls.build(frame, player).pack(fill="x", pady=(10, 0))
 
         # Sized to its own actual content rather than a hardcoded guess -- a fixed
         # literal here previously drifted out of sync with what got added to the frame

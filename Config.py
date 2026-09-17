@@ -6,8 +6,12 @@ CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".texttoaudio", "config.json
 DEFAULTS = {
     "engine": "piper",  # "piper" (natural, offline) or "pyttsx3" (system voice, always available)
     "voice": "en_US-amy-medium",
-    "speed": 1.0,  # 0.5 (slower) .. 2.0 (faster) -> mapped to Piper's length_scale
-    "expressiveness": 0.667,  # Piper's noise_scale: lower = flatter/more consistent, higher = more varied
+    # Speed and Tone used to be synthesis-time settings baked into the WAV (requiring a
+    # re-conversion to change). They're now live playback controls applied by
+    # AudioPlayer -- see set_speed()/set_tone() -- and these two values just remember
+    # the last-used slider positions across restarts, the same as any other preference.
+    "playback_speed": 1.0,  # 0.5 (slower) .. 2.5 (faster), pitch-preserving
+    "playback_tone": 0.0,  # -6 .. +6 semitones pitch shift, independent of speed
     "large_text": False,  # scales up UI text app-wide for readability
     "sound_effects_enabled": True,  # short audio cues for app ready/conversion done/error/exit
     "start_in_mini_mode": False,  # remembers whether the mini player was open at last exit

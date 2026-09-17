@@ -3,6 +3,7 @@ import logging
 import pytest
 import ttkbootstrap as ttk
 
+import Config
 import ErrorReporter
 import LogManager
 
@@ -74,6 +75,15 @@ def requires_pyttsx3_voice():
     correct response here, not a false failure."""
     if not _pyttsx3_actually_synthesizes():
         pytest.skip("pyttsx3 does not produce usable audio in this environment")
+
+
+@pytest.fixture(autouse=True)
+def isolated_config(tmp_path, monkeypatch):
+    """Points Config.CONFIG_PATH at a throwaway file for every test, so nothing (e.g.
+    PlaybackControls, built into every MiniPlayer/main-window Playback panel) reads or
+    writes the developer's real ~/.texttoaudio/config.json while tests run. A test that
+    needs a specific path still monkeypatches it explicitly (harmless double-patch)."""
+    monkeypatch.setattr(Config, "CONFIG_PATH", str(tmp_path / "config.json"))
 
 
 @pytest.fixture(autouse=True)
