@@ -54,6 +54,77 @@ def extract_structure_counts(file_path):
     return None, None
 
 
+def extract_chapters(file_path):
+    """Returns a list of per-chapter plain text, in reading order, for a format where
+    "chapter" is a real structural concept -- or None if the format has no such concept,
+    or nothing that looks like a chapter boundary was actually found in this particular
+    document. Used to offer splitting a converted audiobook into one file per chapter
+    instead of a single long file, mirroring what dedicated audiobook tools do. Unlike
+    extract_text(), this never raises for an unsupported format -- splitting is an
+    opt-in convenience, so callers are expected to fall back to a single whole-file
+    conversion when this returns None rather than treating it as an error.
+    """
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext == ".epub":
+        return _extract_epub_chapters(file_path)
+    if ext == ".docx":
+        return _extract_docx_chapters(file_path)
+    if ext in (".mobi", ".azw3"):
+        return _extract_mobi_chapters(file_path)
+    return None
+
+
+def _extract_epub_chapters(path):
+    book = epub.read_epub(path)
+    chapters = []
+    for item in book.get_items_of_type(ITEM_DOCUMENT):
+        if not item.is_chapter():
+            continue
+        soup = BeautifulSoup(item.get_content(), "html.parser")
+        text = soup.get_text(separator=" ").strip()
+        if text:
+            chapters.append(text)
+    return chapters or None
+
+
+def _extract_docx_chapters(path):
+    # Same "Heading 1" heuristic as _count_docx_chapters: everything from one Heading 1
+    # paragraph up to (not including) the next becomes one chapter's text, including the
+    # heading itself so the chapter title is still read aloud, the same as it always was
+    # in the un-split whole-document text. Anything before the first Heading 1 (a title
+    # page, foreword, etc.) becomes its own leading chapter rather than being dropped.
+    document = docx.Document(path)
+    chapters = []
+    current = []
+    for p in document.paragraphs:
+        if p.style and p.style.name == "Heading 1":
+            if current:
+                chapters.append("\n".join(current))
+            current = [p.text]
+        else:
+            current.append(p.text)
+    if current:
+        chapters.append("\n".join(current))
+    # Fewer than two chapters means no real Heading 1 boundary was found -- the whole
+    # document just landed in one bucket, which isn't a split worth offering.
+    if len(chapters) < 2:
+        return None
+    return chapters
+
+
+def _extract_mobi_chapters(path):
+    import mobi
+
+    tempdir, extracted_path = mobi.extract(path)
+    try:
+        ext = os.path.splitext(extracted_path)[1].lower()
+        if ext == ".epub":
+            return _extract_epub_chapters(extracted_path)
+        return None  # a PDF-based Kindle extraction has pages, not chapters
+    finally:
+        shutil.rmtree(tempdir, ignore_errors=True)
+
+
 def _count_pdf_pages(path):
     with open(path, "rb") as pdf_file:
         return len(pypdf.PdfReader(pdf_file).pages)

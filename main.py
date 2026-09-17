@@ -169,9 +169,11 @@ def refresh_library():
     library.refresh()
 
 
-def start_conversion(files, output_dir):
+def start_conversion(files, output_dir, split_chapters=False):
     """Shared by a normal Convert click, a re-convert, and resuming an interrupted batch
-    from last session -- all three just need a file list and a destination."""
+    from last session -- all three just need a file list and a destination. Re-convert
+    and batch-resume never split into chapters (the source is already a single audio
+    file's stored text by that point, with no chapter structure left to find)."""
     global progress_dialog
 
     # A re-convert overwrites the same output file it's re-synthesizing, and Windows
@@ -191,14 +193,14 @@ def start_conversion(files, output_dir):
 
     ConversionQueue.save(files, output_dir)
     progress_dialog = ProgressDialog(app, converter, len(files))
-    converter.convert_to_audio(files, output_dir)
+    converter.convert_to_audio(files, output_dir, split_chapters=split_chapters)
 
 
 def do_convert():
     if not explorer.file_list:
         logger.add_event("warn", "No files queued for conversion")
         return
-    start_conversion(explorer.file_list, explorer.download_directory)
+    start_conversion(explorer.file_list, explorer.download_directory, split_chapters=split_chapters_var.get())
     explorer.clear_files()
 
 
@@ -641,20 +643,48 @@ apply_text_scale(Config.load()["large_text"])
 
 update_banner = UpdateBanner(app, logger, on_before_install_quit=quit_for_update)
 
-add_files_btn = ttk.Button(controls_frame, text="+ Add Files", command=explorer.add_files, bootstyle="primary")
+add_files_btn = ttk.Button(
+    controls_frame, text="+ Add Files (Ctrl+O)", command=explorer.add_files, bootstyle="primary"
+)
 del_file_btn = ttk.Button(
-    controls_frame, text="− Remove Selected", command=explorer.remove_file, bootstyle="secondary-outline"
+    controls_frame, text="− Remove Selected (Del)", command=explorer.remove_file, bootstyle="secondary-outline"
 )
 del_all_btn = ttk.Button(
     controls_frame, text="✕ Remove All", command=explorer.clear_files, bootstyle="secondary-outline"
 )
-convert_btn = ttk.Button(controls_frame, text="▶ Convert to Audio", bootstyle="success", command=do_convert)
+convert_btn = ttk.Button(
+    controls_frame, text="▶ Convert to Audio (Ctrl+Enter)", bootstyle="success", command=do_convert
+)
+
+split_chapters_var = tk.BooleanVar(value=False)
+split_chapters_check = ttk.Checkbutton(
+    controls_frame, text="Split into chapter files", variable=split_chapters_var, bootstyle="round-toggle",
+)
+split_chapters_hint = ttk.Label(
+    controls_frame, text="EPUB/DOCX/MOBI/AZW3 only;\nother formats convert as one file",
+    bootstyle="secondary", justify="left", font=("Segoe UI", 8),
+)
 
 add_files_btn.grid(row=0, column=0, sticky="ew", pady=(0, 6))
 del_file_btn.grid(row=1, column=0, sticky="ew", pady=(0, 6))
 del_all_btn.grid(row=2, column=0, sticky="ew", pady=(0, 6))
-convert_btn.grid(row=3, column=0, sticky="ew", ipady=4)
+split_chapters_check.grid(row=3, column=0, sticky="w", pady=(0, 2))
+split_chapters_hint.grid(row=4, column=0, sticky="w", pady=(0, 6))
+convert_btn.grid(row=5, column=0, sticky="ew", ipady=4)
 controls_frame.columnconfigure(0, weight=1)
+
+# Keyboard shortcuts for power users, mirroring what the buttons already do rather than
+# introducing new behavior -- each just calls the same function a click would. Ctrl-combos
+# are used throughout instead of bare keys (except Delete/Return, bound to specific list
+# widgets rather than app-wide) so nothing here fires while typing in a Settings drawer
+# text field. Button labels above spell out the ones most worth knowing.
+app.bind_all("<Control-o>", lambda _e: explorer.add_files())
+app.bind_all("<Control-Return>", lambda _e: do_convert())
+app.bind_all("<Control-comma>", lambda _e: toggle_settings_drawer())
+app.bind_all("<Control-p>", lambda _e: toggle_pause())
+app.bind_all("<Control-q>", lambda _e: confirm_quit())
+file_list_display.bind("<Delete>", lambda _e: explorer.remove_file())
+library_tree.bind("<Return>", play_selected_audio)  # keyboard equivalent of the existing double-click
 
 logger.add_event("info", "Application started successfully")
 SoundEffects.play("ready")

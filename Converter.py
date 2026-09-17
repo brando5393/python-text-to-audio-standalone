@@ -52,10 +52,19 @@ class Converter:
         self._cancel_event = threading.Event()
         self._pyttsx3_speaker = None
 
-    def convert_to_audio(self, files, output_dir):
-        """Queues `files` for background conversion into `output_dir`. Non-blocking."""
+    def convert_to_audio(self, files, output_dir, split_chapters=False):
+        """Queues `files` for background conversion into `output_dir`. Non-blocking.
+
+        `split_chapters`, when True, converts each eligible file (currently EPUB, DOCX,
+        and MOBI/AZW3 that unpack to EPUB -- see TextExtraction.extract_chapters) into
+        one audio file per chapter instead of a single whole-file recording. A file with
+        no detectable chapter structure -- including every other supported format --
+        falls back to the normal single-file conversion automatically.
+        """
         self._cancel_event.clear()
-        worker = threading.Thread(target=self._convert_worker, args=(list(files), output_dir), daemon=True)
+        worker = threading.Thread(
+            target=self._convert_worker, args=(list(files), output_dir, split_chapters), daemon=True
+        )
         worker.start()
 
     def cancel(self):
@@ -72,9 +81,9 @@ class Converter:
                 break
         return events
 
-    def _convert_worker(self, files, output_dir):
+    def _convert_worker(self, files, output_dir, split_chapters=False):
         try:
-            self._convert_worker_inner(files, output_dir)
+            self._convert_worker_inner(files, output_dir, split_chapters)
         except Exception as e:
             # A safety net: without this, an unexpected exception here (e.g. the TTS
             # engine failing to initialize) would kill the daemon thread silently and
@@ -84,7 +93,7 @@ class Converter:
         finally:
             self._events.put(("all_done", None, None))
 
-    def _convert_worker_inner(self, files, output_dir):
+    def _convert_worker_inner(self, files, output_dir, split_chapters=False):
         settings = Config.load()
         os.makedirs(output_dir, exist_ok=True)
 
@@ -127,21 +136,53 @@ class Converter:
                         "Install the engine and download the voice from Settings > Voice",
                     )
 
+                base_name = os.path.splitext(os.path.basename(file))[0]
+                item_settings = {
+                    "voice": effective_voice, "speed": settings["speed"], "expressiveness": settings["expressiveness"],
+                }
+
+                chapter_texts = None
+                if split_chapters:
+                    try:
+                        chapter_texts = TextExtraction.extract_chapters(file)
+                    except Exception:
+                        chapter_texts = None  # falls back to a normal whole-file conversion below
+
+                if chapter_texts:
+                    width = len(str(len(chapter_texts)))
+                    added_any = False
+                    for idx, raw_chapter_text in enumerate(chapter_texts, start=1):
+                        chapter_text = TextSanitization.sanitize(raw_chapter_text)
+                        clean_chapter_text = chapter_text.strip().replace("\n", " ")
+                        if not clean_chapter_text:
+                            continue  # an empty chapter (e.g. a blank title page) is skipped, not an error
+                        chapter_label = f"{base_name} - Chapter {idx:0{width}d}"
+                        output_file = os.path.join(output_dir, chapter_label + ".wav")
+                        plan.append({
+                            "file": chapter_label, "chunks": TextChunking.split_into_chunks(clean_chapter_text),
+                            "output_file": output_file, "text": clean_chapter_text,
+                            "pages": None, "chapters": None, "use_piper": use_piper, "settings": item_settings,
+                        })
+                        added_any = True
+                    if added_any:
+                        self.logger.add_event(
+                            "info", f"Splitting '{os.path.basename(file)}' into {len(chapter_texts)} chapter files",
+                        )
+                        continue
+                    # every chapter came out blank after sanitization -- fall through and
+                    # convert the whole document as one file instead, same as no chapters found
+
                 text = TextExtraction.extract_text(file)
                 text = TextSanitization.sanitize(text)
                 clean_text = text.strip().replace("\n", " ")
                 if not clean_text:
                     raise ValueError("No extractable text was found in this file")
                 chunks = TextChunking.split_into_chunks(clean_text)
-                base_name = os.path.splitext(os.path.basename(file))[0]
                 output_file = os.path.join(output_dir, base_name + ".wav")
                 try:
                     pages, chapters = TextExtraction.extract_structure_counts(file)
                 except Exception:
                     pages, chapters = None, None  # a display-only convenience; never worth failing the conversion over
-                item_settings = {
-                    "voice": effective_voice, "speed": settings["speed"], "expressiveness": settings["expressiveness"],
-                }
                 plan.append({
                     "file": file, "chunks": chunks, "output_file": output_file, "text": clean_text,
                     "pages": pages, "chapters": chapters, "use_piper": use_piper, "settings": item_settings,

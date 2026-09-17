@@ -150,3 +150,62 @@ def test_extract_structure_counts_txt_returns_none_none(tmp_path):
     path = tmp_path / "note.txt"
     path.write_text("Plain text content.", encoding="utf-8")
     assert te.extract_structure_counts(str(path)) == (None, None)
+
+
+def test_extract_chapters_epub_returns_one_text_per_chapter(tmp_path):
+    path = tmp_path / "book.epub"
+    _make_epub(path, 3)
+    chapters = te.extract_chapters(str(path))
+    assert len(chapters) == 3
+    assert "Content for chapter 1." in chapters[0]
+    assert "Content for chapter 2." in chapters[1]
+    assert "Content for chapter 3." in chapters[2]
+
+
+def test_extract_chapters_docx_splits_on_heading_1(tmp_path):
+    doc = docx.Document()
+    doc.add_paragraph("Chapter One", style="Heading 1")
+    doc.add_paragraph("First chapter prose.")
+    doc.add_paragraph("Chapter Two", style="Heading 1")
+    doc.add_paragraph("Second chapter prose.")
+    path = tmp_path / "doc.docx"
+    doc.save(str(path))
+    chapters = te.extract_chapters(str(path))
+    assert len(chapters) == 2
+    assert "First chapter prose." in chapters[0]
+    assert "Second chapter prose." not in chapters[0]
+    assert "Second chapter prose." in chapters[1]
+
+
+def test_extract_chapters_docx_keeps_text_before_first_heading(tmp_path):
+    doc = docx.Document()
+    doc.add_paragraph("Front matter before any heading.")
+    doc.add_paragraph("Chapter One", style="Heading 1")
+    doc.add_paragraph("First chapter prose.")
+    doc.add_paragraph("Chapter Two", style="Heading 1")
+    doc.add_paragraph("Second chapter prose.")
+    path = tmp_path / "doc.docx"
+    doc.save(str(path))
+    chapters = te.extract_chapters(str(path))
+    assert len(chapters) == 3
+    assert "Front matter before any heading." in chapters[0]
+
+
+def test_extract_chapters_docx_returns_none_without_headings(tmp_path):
+    doc = docx.Document()
+    doc.add_paragraph("Just a plain paragraph with no heading style.")
+    path = tmp_path / "doc.docx"
+    doc.save(str(path))
+    assert te.extract_chapters(str(path)) is None
+
+
+def test_extract_chapters_returns_none_for_unsupported_format(tmp_path):
+    path = tmp_path / "note.txt"
+    path.write_text("Plain text content.", encoding="utf-8")
+    assert te.extract_chapters(str(path)) is None
+
+
+def test_extract_chapters_pdf_returns_none(tmp_path):
+    path = tmp_path / "doc.pdf"
+    _make_pdf(path, 3)
+    assert te.extract_chapters(str(path)) is None
