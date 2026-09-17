@@ -39,7 +39,13 @@ pytest = "^9.1.1"
 # conversion pipeline to AI agents like Claude Desktop/Claude Code). Deliberately kept
 # out of [tool.poetry.dependencies] and out of setup.py's build_exe_options -- this is a
 # developer/agent integration surface, not something every end user installing the
-# desktop app needs bundled into the .msi. Install with `poetry install --with mcp`.
+# desktop app needs bundled into the .msi. `optional = true` is what actually makes
+# Poetry skip this group on a plain `poetry install` -- without it, a group installs by
+# default the same as `dev`, silently defeating the whole point. Install with
+# `poetry install --with mcp`.
+[tool.poetry.group.mcp]
+optional = true
+
 [tool.poetry.group.mcp.dependencies]
 mcp = "^1.2.0"
 # Pinned below mcp's own transitive floor (via pyjwt[crypto]) on purpose: cryptography
