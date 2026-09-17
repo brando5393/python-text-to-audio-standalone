@@ -47,12 +47,16 @@ class SettingsDrawer(ttk.Frame):
     since a drawer you can leave open while you work reads as "live", not "pending".
     """
 
-    def __init__(self, parent, logger, explorer, on_theme_change, on_text_scale_change, on_close, dark_mode):
+    def __init__(
+        self, parent, logger, explorer, on_theme_change, on_text_scale_change, on_close, dark_mode,
+        on_auto_pause_change=lambda enabled: None,
+    ):
         super().__init__(parent, padding=12)
         self.logger = logger
         self.explorer = explorer
         self.on_theme_change = on_theme_change
         self.on_text_scale_change = on_text_scale_change
+        self.on_auto_pause_change = on_auto_pause_change
         self.settings = Config.load()
         self._download_events = queue.Queue()
         self._preview_player = AudioPlayer(alias="texttoaudio_preview")  # own alias -- must
@@ -66,6 +70,7 @@ class SettingsDrawer(ttk.Frame):
         self.expr_var = tk.DoubleVar(value=self.settings["expressiveness"])
         self.large_text_var = tk.BooleanVar(value=self.settings["large_text"])
         self.sound_effects_var = tk.BooleanVar(value=self.settings["sound_effects_enabled"])
+        self.auto_pause_var = tk.BooleanVar(value=self.settings["auto_pause_for_other_audio"])
         self.appearance_var = tk.StringVar(value="dark" if dark_mode else "light")
 
         self._build_header(on_close)
@@ -90,7 +95,7 @@ class SettingsDrawer(ttk.Frame):
 
         for var in (
             self.engine_var, self.voice_var, self.speed_var, self.expr_var,
-            self.large_text_var, self.sound_effects_var,
+            self.large_text_var, self.sound_effects_var, self.auto_pause_var,
         ):
             var.trace_add("write", lambda *_args: self._save())
 
@@ -114,6 +119,7 @@ class SettingsDrawer(ttk.Frame):
         self.expr_var.set(settings["expressiveness"])
         self.large_text_var.set(settings["large_text"])
         self.sound_effects_var.set(settings["sound_effects_enabled"])
+        self.auto_pause_var.set(settings["auto_pause_for_other_audio"])
         self._update_engine_status()
         self._loading = False
 
@@ -366,9 +372,11 @@ class SettingsDrawer(ttk.Frame):
             "expressiveness": round(self.expr_var.get(), 2),
             "large_text": self.large_text_var.get(),
             "sound_effects_enabled": self.sound_effects_var.get(),
+            "auto_pause_for_other_audio": self.auto_pause_var.get(),
         })
         Config.save(current)
         self.on_text_scale_change(self.large_text_var.get())
+        self.on_auto_pause_change(self.auto_pause_var.get())
         self._update_engine_status()
 
     # -- App tab ---------------------------------------------------------------------
@@ -472,6 +480,8 @@ class SettingsDrawer(ttk.Frame):
             self.large_text_var.set(Config.DEFAULTS["large_text"])
             self.on_text_scale_change(Config.DEFAULTS["large_text"])
             self.sound_effects_var.set(Config.DEFAULTS["sound_effects_enabled"])
+            self.auto_pause_var.set(Config.DEFAULTS["auto_pause_for_other_audio"])
+            self.on_auto_pause_change(Config.DEFAULTS["auto_pause_for_other_audio"])
             self._loading = False
             self.appearance_var.set("light")
             self._apply_appearance()
@@ -495,6 +505,23 @@ class SettingsDrawer(ttk.Frame):
             sound_frame, text="Play a sound for app ready / conversion done / errors / exit",
             variable=self.sound_effects_var, bootstyle="round-toggle",
         ).pack(anchor="w")
+
+        # Its own section (not folded into Sound Cues above): this toggle changes when
+        # playback happens rather than what you hear, and defaults OFF like every other
+        # behavior-changing toggle in this app (see large_text) -- opt-in, not assumed.
+        interruption_frame = ttk.Labelframe(parent, text="Calls & Notifications", padding=10, bootstyle="primary")
+        interruption_frame.pack(fill="x", pady=(10, 0))
+        ttk.Checkbutton(
+            interruption_frame, text="Pause automatically during calls and notifications",
+            variable=self.auto_pause_var, bootstyle="round-toggle",
+        ).pack(anchor="w")
+        ttk.Label(
+            interruption_frame,
+            text="Pauses playback when another app's audio starts (a call, a notification "
+            "ding, another app's music) and resumes once it's quiet again -- unless you "
+            "paused it yourself, which this never overrides.",
+            bootstyle="secondary", wraplength=220,
+        ).pack(anchor="w", pady=(4, 0))
 
         statement_frame = ttk.Labelframe(parent, text="Accessibility Statement", padding=10, bootstyle="primary")
         statement_frame.pack(fill="both", expand=True, pady=(10, 0))

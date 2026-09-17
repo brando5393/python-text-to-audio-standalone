@@ -17,6 +17,7 @@ striprtf = "^0.0.33"
 packaging = "^26.3"
 pypdf = "^6.18.1"
 ftfy = "^6.3.1"
+pycaw = "^20251023"
 
 [tool.poetry.group.dev.dependencies]
 cx-freeze = "^8.7.0"
