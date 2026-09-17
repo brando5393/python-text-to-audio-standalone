@@ -161,6 +161,22 @@ def start_conversion(files, output_dir):
     """Shared by a normal Convert click, a re-convert, and resuming an interrupted batch
     from last session -- all three just need a file list and a destination."""
     global progress_dialog
+
+    # A re-convert overwrites the same output file it's re-synthesizing, and Windows
+    # won't allow that while Talebrew's own player still has it open -- most visibly
+    # when someone re-converts a file they were just listening to. Releasing it here
+    # instead of surfacing "Access is denied" turns a real failure this app already hit
+    # into a no-op the user never has to think about.
+    currently_playing = player.current_path()
+    if currently_playing:
+        for file in files:
+            base_name = os.path.splitext(os.path.basename(file))[0]
+            expected_output = os.path.join(output_dir, base_name + ".wav")
+            if os.path.normcase(expected_output) == os.path.normcase(currently_playing):
+                player.stop()
+                now_playing_var.set("Nothing playing")
+                break
+
     ConversionQueue.save(files, output_dir)
     progress_dialog = ProgressDialog(app, converter, len(files))
     converter.convert_to_audio(files, output_dir)

@@ -46,6 +46,9 @@ class AudioPlayer:
     def stop(self):
         self._close()
 
+    def current_path(self):
+        return self._current_path
+
     def seek_ms(self, position_ms):
         if self._current_path is not None:
             self._send(f"seek {_ALIAS} to {int(position_ms)}")

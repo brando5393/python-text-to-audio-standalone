@@ -70,8 +70,15 @@ def test_duplicate_errors_only_report_once(tmp_path, monkeypatch):
 
     monkeypatch.setattr(subprocess, "run", fake_run)
 
+    import hashlib
+
+    signature = hashlib.sha256(b"same-technical-detail").hexdigest()
+
     ErrorReporter.report("Something broke", "same-technical-detail")
-    assert _wait_for(lambda: len(calls) == 1)
+    # Waits for the dedup record itself, not just the subprocess call -- otherwise the
+    # second report() below can race ahead of the first one's own dedup write finishing,
+    # making this test flaky rather than the code it's testing.
+    assert _wait_for(lambda: ErrorReporter._already_reported(signature))
 
     ErrorReporter.report("Something broke again, different message", "same-technical-detail")
     time.sleep(0.2)  # give a wrongly-firing second report a chance to show up
