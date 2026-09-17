@@ -277,6 +277,41 @@ def test_keeps_ordinary_sentences_with_punctuation_that_are_not_pure_dividers():
     assert TextSanitization.sanitize(text) == text
 
 
+def test_strips_stray_unicode_replacement_characters():
+    """Regression scenario: a document saved or transcoded with the wrong encoding at some
+    earlier step produces the Unicode replacement character (U+FFFD) wherever a byte
+    sequence couldn't be decoded at all. Unlike mojibake, this data is already
+    unrecoverable by the time sanitize() sees it -- ftfy deliberately leaves it alone --
+    so the best outcome is closing the gap rather than reading it aloud as a glitch."""
+    text = "The na�ve traveler set out at dawn� and never looked back."
+    result = TextSanitization.sanitize(text)
+    assert "�" not in result
+    assert "The na" in result and "traveler set out at dawn" in result and "never looked back." in result
+
+
+def test_realistic_scanned_ebook_excerpt_end_to_end():
+    """Integration-style scenario resembling a real scanned/web-sourced ebook chapter:
+    a scene-break divider, leftover HTML entities from a web-to-PDF conversion, a
+    zero-width space and a soft hyphen from copy-pasted formatting, and ordinary prose
+    with a genuine hyphenated name -- all in one passage, the way the other high-value
+    regression tests in this file combine several real symptoms into one check."""
+    text = (
+        "Chapter 3\n"
+        "* * *\n"
+        "Mrs. Bennet & her daughters wasn&#39;t going to miss the ball.\n"
+        "It was her respon­sibility to see Anne-\nMarie dressed in time,​ and she "
+        "intended to see it done."
+    )
+    result = TextSanitization.sanitize(text)
+    assert "* * *" not in result
+    assert "&" in result and "&#39;" not in result and "wasn't" in result
+    assert "responsibility" in result
+    assert "­" not in result and "​" not in result
+    assert "Anne-\nMarie" in result or "Anne-Marie" in result
+    assert "AnneMarie" not in result
+    assert "she intended to see it done." in result
+
+
 def test_keeps_dialogue_dashes_at_line_start():
     """French/European-style dialogue sometimes marks a new speaker with a leading dash
     or em dash at the start of a line, which is real, meaningful content and must never

@@ -35,16 +35,27 @@ _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]")
 # render as nothing visually, so a human proofreading the source text would never even
 # see them, but some TTS engines stumble on them (odd pauses or a spoken glyph name).
 # Dropping them is unconditionally safe: by definition they carry no visible content.
-_ZERO_WIDTH_CHARS = re.compile(r"[​-‏⁠﻿]")
+_ZERO_WIDTH_CHARS = re.compile(
+    "[" + "".join(chr(cp) for cp in (0x200B, 0x200C, 0x200D, 0x200E, 0x200F, 0x2060, 0xFEFF)) + "]"
+)
 
 # A soft hyphen (U+00AD) marks a discretionary line-break point and is invisible when a
 # word isn't actually broken there -- word processors and PDF generators routinely leave
-# these embedded mid-word (e.g. "respon­sibility") whether or not the line ever wraps
+# these embedded mid-word (e.g. "respon<soft-hyphen>sibility") whether or not the line ever wraps
 # at that point. Left in, some TTS engines read it as a literal hyphen or stumble on it.
 # Removed outright rather than treated like the line-wrap hyphen above: a soft hyphen is
 # never meant to be visible/spoken in the first place, so there's no "keep it as a real
 # hyphen" case to preserve the way there is for a genuine hyphenated compound word.
-_SOFT_HYPHEN = re.compile(r"­")
+_SOFT_HYPHEN = re.compile(chr(0x00AD))
+
+# U+FFFD, the Unicode replacement character, is what Python's own decoder (and many other
+# tools) substitutes for a byte sequence it could not decode at all -- the original data is
+# already gone by the time this text reaches sanitize(), so unlike everything else in this
+# module there is no "real content" to protect here; ftfy repairs recoverable mojibake but
+# deliberately leaves U+FFFD alone since it represents genuinely unrecoverable data, not a
+# reversible encoding mistake. Left in, a TTS engine reads it as a stray question-mark-like
+# glyph or an audible glitch, which is worse than just silently closing the gap.
+_REPLACEMENT_CHAR = re.compile(chr(0xFFFD))
 
 # A scene-break/section-divider line rendered as repeated symbol glyphs with no real words
 # at all ("* * *", "-----", "======", "~ ~ ~ ~") -- a common convention in both scanned and
@@ -127,8 +138,9 @@ def sanitize(text):
     stray numbers, and bullet-point glyphs get skipped or mispronounced instead of just
     being dropped. Also handles: literal HTML entities left over from web-sourced content
     ("&amp;", "&#39;"), invisible zero-width/formatting characters and soft hyphens that
-    survive copy-pasted or web-derived text untouched by NFKC, and ASCII scene-break/divider
-    lines ("* * *", "-----") that carry no content of their own.
+    survive copy-pasted or web-derived text untouched by NFKC, ASCII scene-break/divider
+    lines ("* * *", "-----") that carry no content of their own, and stray Unicode
+    replacement characters left behind by an earlier, unrecoverable decoding failure.
 
     Generic number/date/currency expansion (e.g. "$5.99" -> "five dollars and ninety nine
     cents") is deliberately not attempted here: both TTS engines this app supports
@@ -154,6 +166,7 @@ def sanitize(text):
     text = _CONTROL_CHARS.sub("", text)
     text = _ZERO_WIDTH_CHARS.sub("", text)
     text = _SOFT_HYPHEN.sub("", text)
+    text = _REPLACEMENT_CHAR.sub("", text)
 
     text = _REPEATED_LETTER.sub(r"\1\1", text)
     text = _REPEATED_WORD.sub(r"\1", text)
