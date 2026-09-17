@@ -16,12 +16,41 @@ LEVELS = {
     "error": logging.ERROR,
 }
 
-LEVEL_COLORS = {
-    logging.DEBUG: "#888888",
-    logging.INFO: "#1c1c1c",
-    logging.WARNING: "#7a561d",  # 5.45:1 contrast on the light theme bg; #a9720c measured only 3.40:1
+# One palette per theme, not one hardcoded set -- these used to be a single dict that
+# was only ever checked against the light theme (see the old WARNING comment, "5.45:1
+# contrast on the light theme bg"). Measured against the dark theme's real input
+# background, INFO came out at just 1.09:1 (near-black text on a near-black background --
+# effectively invisible) and WARNING/ERROR both fell below 2.5:1. Each shade below is
+# individually verified >=4.5:1 against its own theme's input background; see
+# test_log_manager.py.
+LEVEL_COLORS_LIGHT = {
+    logging.DEBUG: "#696969",
+    logging.INFO: "#3b2a1e",  # the light theme's own default text color
+    logging.WARNING: "#7a561d",
     logging.ERROR: "#b3261e",
 }
+LEVEL_COLORS_DARK = {
+    logging.DEBUG: "#8a8a8a",
+    logging.INFO: "#f2e8d9",  # the dark theme's own default text color
+    logging.WARNING: "#b7812b",
+    logging.ERROR: "#e35f57",
+}
+
+_dark_mode = False  # kept in sync via set_dark_mode(); matches the app's own default
+# starting theme (coffeehouse-light) so colors are right from first launch.
+
+
+def set_dark_mode(dark):
+    """Keeps the log's per-level colors in sync with the active theme. A plain module
+    global (not a Tk call) so it's safe to read from _QueueHandler.emit(), which may run
+    on a background conversion thread via add_event()."""
+    global _dark_mode
+    _dark_mode = dark
+
+
+def _current_level_colors():
+    return LEVEL_COLORS_DARK if _dark_mode else LEVEL_COLORS_LIGHT
+
 
 POLL_INTERVAL_MS = 150
 
@@ -39,7 +68,8 @@ class _QueueHandler(logging.Handler):
         self.out_queue = out_queue
 
     def emit(self, record):
-        self.out_queue.put((self.format(record), LEVEL_COLORS.get(record.levelno, "#1c1c1c")))
+        colors = _current_level_colors()
+        self.out_queue.put((self.format(record), colors.get(record.levelno, colors[logging.INFO])))
 
 
 class LogManager:

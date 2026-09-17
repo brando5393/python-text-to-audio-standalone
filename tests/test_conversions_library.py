@@ -1,5 +1,6 @@
 import json
 import os
+import tkinter.font as tkfont
 
 import ttkbootstrap as ttk
 
@@ -157,6 +158,30 @@ def test_text_for_returns_none_for_folders(tk_root, tmp_path):
     for item in tree.get_children(""):
         if tree.item(item, "text") == "Books":
             assert lib.text_for(item) is None
+
+
+def test_sync_row_height_grows_with_the_default_font(tk_root, tmp_path):
+    """Regression test: ttk computes a Treeview's row height once from the font's
+    metrics when the theme is set up, and never re-derives it afterward -- confirmed by
+    checking the style's "rowheight" directly. Without sync_row_height(), the "Larger
+    text" toggle would grow the named font but leave rows too short for the bigger text.
+    """
+    tree = ttk.Treeview(tk_root, show="tree")
+    lib = ConversionsLibrary(tree, str(tmp_path))
+    style = ttk.Style()
+
+    original_size = tkfont.nametofont("TkDefaultFont").actual()["size"]
+    try:
+        rowheight_before = int(style.lookup("Treeview", "rowheight"))
+
+        tkfont.nametofont("TkDefaultFont").configure(size=original_size + 4)
+        lib.sync_row_height()
+
+        rowheight_after = int(style.lookup("Treeview", "rowheight"))
+        assert rowheight_after > rowheight_before
+    finally:
+        tkfont.nametofont("TkDefaultFont").configure(size=original_size)
+        lib.sync_row_height()
 
 
 def test_survives_when_icons_fail_to_load(tk_root, tmp_path):
