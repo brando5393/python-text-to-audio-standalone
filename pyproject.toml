@@ -23,7 +23,11 @@ pypdf = "^6.18.1"
 ftfy = "^6.3.1"
 sounddevice = "^0.5.1"
 numpy = "^2.5.0"
-soundfile = "^0.13.1"
+# 0.14.0+ specifically: earlier win_arm64 wheels of soundfile didn't bundle libsndfile
+# at all (relying on a system-installed copy via ctypes.util.find_library, which fails
+# outright on a clean end-user machine) -- caught by actually building and inspecting
+# the frozen .exe output, not by reading the dependency's changelog.
+soundfile = "^0.14.0"
 
 [tool.poetry.group.dev.dependencies]
 cx-freeze = "^8.7.0"
