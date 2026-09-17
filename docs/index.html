@@ -29,6 +29,7 @@
     --bg: var(--cream);
     --fg: var(--ink);
     --fg-muted: var(--ink-soft);
+    --wood: url("assets/wood-light.webp");
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
@@ -41,6 +42,7 @@
       --border: #4a3a2a;
       --cream-soft: #2c2119;
       --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
+      --wood: url("assets/wood-dark.webp");
     }
   }
   :root[data-theme="dark"] {
@@ -53,13 +55,14 @@
     --border: #4a3a2a;
     --cream-soft: #2c2119;
     --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
+    --wood: url("assets/wood-dark.webp");
   }
 
   * { box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; }
   body {
     margin: 0;
-    background: var(--bg);
+    background: var(--bg) var(--wood) repeat;
     color: var(--fg);
     font-family: 'Inter', system-ui, -apple-system, "Segoe UI", sans-serif;
     line-height: 1.6;
@@ -172,7 +175,7 @@
 
   /* ---------- Get it ---------- */
   section.get {
-    background: var(--paper); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    background: var(--paper) var(--wood) repeat; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
     padding-block: 60px; text-align: center;
   }
   section.get h2 { font-size: 2rem; margin-bottom: 10px; }
