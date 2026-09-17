@@ -1,6 +1,7 @@
 """Tests for ErrorReporter. subprocess.run is always faked here -- these tests must
 never invoke the real `gh` CLI, which would file a live issue on the real repo."""
 
+import json
 import subprocess
 import time
 
@@ -136,3 +137,38 @@ def test_title_is_truncated():
     title = ErrorReporter._truncate(f"Error: {long_message}", ErrorReporter.TITLE_MAX_CHARS)
     assert len(title) <= ErrorReporter.TITLE_MAX_CHARS
     assert title.endswith("…")
+
+
+def test_corrupted_reported_errors_file_is_treated_as_never_reported(tmp_path, monkeypatch):
+    """A crash mid-write could in theory leave reported_errors.json corrupted. Dedup
+    must fail open (report it again) rather than raising and silently losing the crash
+    report entirely -- an occasional duplicate issue is far cheaper than never being
+    told about a real bug again."""
+    _isolate(tmp_path, monkeypatch)
+    with open(ErrorReporter.REPORTED_PATH, "w", encoding="utf-8") as f:
+        f.write("{not valid json at all")
+
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        return _FakeCompletedProcess(returncode=0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    ErrorReporter.report("Something broke", "detail")
+    assert _wait_for(lambda: len(calls) == 1)
+
+
+def test_mark_reported_recovers_from_a_corrupted_file(tmp_path, monkeypatch):
+    """_mark_reported must overwrite a corrupted reported_errors.json with a fresh,
+    valid one instead of failing to record the dedup signature at all -- otherwise every
+    future report() call would keep re-reading the same broken file forever."""
+    _isolate(tmp_path, monkeypatch)
+    with open(ErrorReporter.REPORTED_PATH, "w", encoding="utf-8") as f:
+        f.write("[[[not json")
+
+    ErrorReporter._mark_reported("some-signature")
+
+    with open(ErrorReporter.REPORTED_PATH, "r", encoding="utf-8") as f:
+        assert "some-signature" in json.load(f)

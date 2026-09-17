@@ -312,6 +312,31 @@ def test_realistic_scanned_ebook_excerpt_end_to_end():
     assert "she intended to see it done." in result
 
 
+def test_table_of_contents_watermark_and_footnotes_all_in_one_passage():
+    """Integration-style regression: a real scanned book can combine a table of
+    contents, a page-stamp watermark, and inline footnote markers all in the same
+    document -- each artifact type has its own regression test in isolation above, but
+    a bug in how the regexes interact (e.g. one check consuming text another one still
+    needed to match) could only show up when several fire on the very same passage."""
+    toc = "Chapter One .......... 14\nChapter Two .......... 42\n"
+    watermark_pages = []
+    for i, name in enumerate(["Elizabeth", "Darcy", "Bingley"]):
+        watermark_pages.append(
+            f"some page content ending here.[3] {i + 1} / 301Full Text Archive {name} said something.12The next part follows."
+        )
+    text = toc + " ".join(watermark_pages)
+
+    result = TextSanitization.sanitize(text)
+
+    assert "Chapter One" not in result
+    assert "Chapter Two" not in result
+    assert "Full Text Archive" not in result
+    assert "[3]" not in result
+    for name in ["Elizabeth", "Darcy", "Bingley"]:
+        assert f"{name} said something." in result
+    assert "The next part follows." in result
+
+
 def test_keeps_dialogue_dashes_at_line_start():
     """French/European-style dialogue sometimes marks a new speaker with a leading dash
     or em dash at the start of a line, which is real, meaningful content and must never

@@ -69,3 +69,25 @@ def test_is_resumable_true_when_duration_unknown():
     # Duration might not be readable for some reason -- still resumable as long as the
     # saved position itself is clearly past the start.
     assert pm.is_resumable(50000, 0) is True
+
+
+def test_get_position_returns_none_when_file_is_corrupted(tmp_path, monkeypatch):
+    """A crash mid-write, before the atomic os.replace in _save, could in theory leave
+    a partially-written or otherwise corrupted JSON file behind. Reading it back must
+    fall back to "nothing saved" rather than raising and breaking playback entirely."""
+    _isolate(tmp_path, monkeypatch)
+    with open(pm.POSITIONS_PATH, "w", encoding="utf-8") as f:
+        f.write("{not valid json")
+
+    assert pm.get_position(r"C:\Books\a.wav") is None
+
+
+def test_save_position_overwrites_a_corrupted_file(tmp_path, monkeypatch):
+    """Saving a new position must recover cleanly from a corrupted file on disk instead
+    of merging garbage into it or failing outright."""
+    _isolate(tmp_path, monkeypatch)
+    with open(pm.POSITIONS_PATH, "w", encoding="utf-8") as f:
+        f.write("not even json")
+
+    pm.save_position(r"C:\Books\a.wav", 5000)
+    assert pm.get_position(r"C:\Books\a.wav") == 5000
