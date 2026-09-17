@@ -16,6 +16,7 @@ import ConversionQueue
 import Converter
 import FileManager
 import PiperEngine
+import PlaybackControls
 import PlaybackMemory
 import SoundEffects
 import TextExtraction
@@ -644,6 +645,11 @@ mini_player_btn = ttk.Button(
 mini_player_btn.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(6, 0))
 player_frame.columnconfigure(0, weight=1, minsize=130)
 player_frame.columnconfigure(1, weight=1, minsize=90)
+
+# Speed/Tone: live playback controls (not synthesis settings -- see PlaybackControls.py),
+# applied immediately to whatever's currently playing or paused, no re-conversion needed.
+playback_controls = PlaybackControls.build(player_frame, player)
+playback_controls.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(10, 0))
 
 # Settings drawer (docked, hidden until toggled)
 drawer_wrapper = ttk.Frame(app, width=260)

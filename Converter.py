@@ -137,9 +137,11 @@ class Converter:
                     )
 
                 base_name = os.path.splitext(os.path.basename(file))[0]
-                item_settings = {
-                    "voice": effective_voice, "speed": settings["speed"], "expressiveness": settings["expressiveness"],
-                }
+                # Speed and Tone are live playback controls now (AudioPlayer.set_speed/
+                # set_tone), not synthesis settings -- engines always synthesize at their
+                # normal/neutral rate, so only the voice choice needs to travel with the
+                # conversion job.
+                item_settings = {"voice": effective_voice}
 
                 chapter_texts = None
                 if split_chapters:
@@ -243,9 +245,7 @@ class Converter:
         if resume:
             start_index = resume["completed_chunks"]
             resume_use_piper = resume["engine"] == "piper"
-            resume_settings = {
-                "voice": resume["voice_id"], "speed": settings["speed"], "expressiveness": settings["expressiveness"],
-            }
+            resume_settings = {"voice": resume["voice_id"]}
             wav_info = {"nchannels": resume["nchannels"], "sampwidth": resume["sampwidth"], "framerate": resume["framerate"]}
             self.logger.add_event(
                 "info", f"Resuming '{os.path.basename(file)}' from section {start_index + 1}/{total}",
@@ -343,15 +343,11 @@ class Converter:
 
     def _synthesize_chunk(self, chunk_text, chunk_path, use_piper, settings):
         if use_piper:
-            # length_scale is inverse of speed: 2x speed -> half the length_scale.
+            # Synthesizes at Piper's own neutral rate/expressiveness -- speed and tone
+            # are applied live during playback instead (AudioPlayer.set_speed/
+            # set_tone), so re-converting is never needed just to change them.
             # PiperEngine.synthesize enforces its own subprocess timeout internally.
-            PiperEngine.synthesize(
-                chunk_text,
-                settings["voice"],
-                chunk_path,
-                length_scale=1.0 / max(settings["speed"], 0.1),
-                noise_scale=settings["expressiveness"],
-            )
+            PiperEngine.synthesize(chunk_text, settings["voice"], chunk_path)
             return
 
         if self._pyttsx3_speaker is None:
