@@ -20,7 +20,6 @@ class MiniPlayer(ttk.Toplevel):
     def __init__(self, parent, player, now_playing_var, on_expand):
         super().__init__(parent)
         self.title("Talebrew Mini Player")
-        self.geometry("300x170")
         AppIcon.apply(self)
         self.resizable(False, False)
         self.attributes("-topmost", True)
@@ -62,6 +61,16 @@ class MiniPlayer(ttk.Toplevel):
         ttk.Button(frame, text="⤢ Show Full App", command=on_expand, bootstyle="secondary-outline").pack(
             fill="x", pady=(6, 0)
         )
+
+        # Sized to its own actual content rather than a hardcoded guess -- a fixed
+        # literal here previously drifted out of sync with what got added to the frame
+        # over time (the seek bar and time readout ended up needing more height than the
+        # window had), silently clipping the Play/Pause, Stop, Start Over, and Show Full
+        # App buttons off the bottom of a non-resizable window. This also keeps it
+        # correct if "Larger text" (see main.py's apply_text_scale) is on, since that
+        # grows every widget's natural size too.
+        self.update_idletasks()
+        self.geometry(f"{self.winfo_reqwidth()}x{self.winfo_reqheight()}")
 
         self.after(PROGRESS_POLL_MS, self._update_progress)
 

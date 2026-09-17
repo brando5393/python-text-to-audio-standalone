@@ -51,6 +51,19 @@ def test_mini_player_constructs_and_shows_now_playing(tk_root):
     mini.destroy()
 
 
+def test_window_size_fits_all_its_controls(tk_root):
+    """Regression: the window used to be a hardcoded "300x170" that silently drifted out
+    of sync as controls (the seek bar, the time readout) were added to the frame over
+    time, clipping Play/Pause, Stop, Start Over, and Show Full App off the bottom of a
+    non-resizable window with no way to see or reach them. The actual window size must
+    always be at least as big as what its own content naturally needs."""
+    mini = MiniPlayer(tk_root, FakePlayer(), tk.StringVar(value="Nothing playing."), on_expand=lambda: None)
+    mini.update_idletasks()
+    assert mini.winfo_width() >= mini.winfo_reqwidth()
+    assert mini.winfo_height() >= mini.winfo_reqheight()
+    mini.destroy()
+
+
 def test_toggle_pause_pauses_when_playing(tk_root):
     player = FakePlayer()
     player.playing = True
