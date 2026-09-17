@@ -184,6 +184,41 @@ def test_sync_row_height_grows_with_the_default_font(tk_root, tmp_path):
         lib.sync_row_height()
 
 
+def test_ordered_file_paths_lists_only_files_depth_first(tk_root, tmp_path):
+    os.makedirs(tmp_path / "Books")
+    (tmp_path / "Books" / "chapter1.wav").write_bytes(b"data")
+    (tmp_path / "note.wav").write_bytes(b"data")
+
+    tree = ttk.Treeview(tk_root, show="tree")
+    lib = ConversionsLibrary(tree, str(tmp_path))
+
+    paths = lib.ordered_file_paths()
+    names = [os.path.basename(p) for p in paths]
+    assert "chapter1.wav" in names
+    assert "note.wav" in names
+    assert len(paths) == 2
+
+
+def test_ordered_file_paths_empty_when_no_files(tk_root, tmp_path):
+    tree = ttk.Treeview(tk_root, show="tree")
+    lib = ConversionsLibrary(tree, str(tmp_path))
+    assert lib.ordered_file_paths() == []
+
+
+def test_ordered_file_paths_reflects_current_tree_order(tk_root, tmp_path):
+    (tmp_path / "a.wav").write_bytes(b"data")
+    (tmp_path / "b.wav").write_bytes(b"data")
+
+    tree = ttk.Treeview(tk_root, show="tree")
+    lib = ConversionsLibrary(tree, str(tmp_path))
+    paths = lib.ordered_file_paths()
+
+    # Matches the Treeview's own child order for the root, whatever it is -- not
+    # independently re-derived, so it can never drift from what's actually displayed.
+    displayed_texts = [tree.item(i, "text") for i in tree.get_children("")]
+    assert [os.path.basename(p) for p in paths] == displayed_texts
+
+
 def test_survives_when_icons_fail_to_load(tk_root, tmp_path):
     """Regression test: Treeview.insert(..., image=None, ...) raises a TclError that
     corrupts its whole argument list (not just the image option) on this tkinter
