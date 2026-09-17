@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "python-text-to-audio"
+name = "talebrew"
 version = "0.1.0"
 description = "Talebrew: every story, brewed aloud. Converts text, PDF, and ebook files to audio using offline text-to-speech."
 authors = ["Brandon Williams"]

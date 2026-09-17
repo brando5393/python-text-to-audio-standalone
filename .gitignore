@@ -160,3 +160,10 @@ cython_debug/
 #.idea/
 
 /test_files
+
+# Claude Code agent worktrees (created/removed automatically per session)
+.claude/
+
+# Windows
+Thumbs.db
+desktop.ini
