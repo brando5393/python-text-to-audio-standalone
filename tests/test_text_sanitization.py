@@ -223,6 +223,14 @@ def test_decodes_leftover_html_entities():
     assert "Rock & Roll wasn't always called that" in result
 
 
+def test_keeps_ordinary_ampersands_that_are_not_html_entities():
+    """A bare ampersand in ordinary prose ("AT&T", "Q&A") must never be mistaken for an
+    HTML entity -- only a real entity pattern (a name or numeric reference terminated by
+    a semicolon) is ever decoded."""
+    text = "AT&T ran a Q&A session, and sales & marketing both attended."
+    assert TextSanitization.sanitize(text) == text
+
+
 def test_strips_zero_width_and_invisible_formatting_characters():
     """Regression scenario: copy-pasted or web-derived text sometimes carries truly
     invisible Unicode characters (zero-width space, zero-width joiner, a stray byte-order
