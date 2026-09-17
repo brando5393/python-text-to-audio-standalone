@@ -46,7 +46,9 @@ class Converter:
     with Tk's `after()`.
     """
 
-    def __init__(self, app_log_display):
+    def __init__(self, app_log_display=None):
+        """`app_log_display` is optional -- pass None for headless use (no Tk root/
+        display at all, e.g. the MCP server in mcp_server.py). See LogManager."""
         self.logger = logger.LogManager(app_log_display)
         self._events = queue.Queue()
         self._cancel_event = threading.Event()

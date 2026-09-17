@@ -35,6 +35,22 @@ cx-freeze = "^8.7.0"
 pillow = "^12.3.0"
 pytest = "^9.1.1"
 
+# Optional: only needed to run mcp_server.py (an MCP server exposing Talebrew's
+# conversion pipeline to AI agents like Claude Desktop/Claude Code). Deliberately kept
+# out of [tool.poetry.dependencies] and out of setup.py's build_exe_options -- this is a
+# developer/agent integration surface, not something every end user installing the
+# desktop app needs bundled into the .msi. Install with `poetry install --with mcp`.
+[tool.poetry.group.mcp.dependencies]
+mcp = "^1.2.0"
+# Pinned below mcp's own transitive floor (via pyjwt[crypto]) on purpose: cryptography
+# only ships prebuilt win_arm64 wheels through 46.0.3 (verified directly with
+# `pip download --platform win_arm64 --only-binary=:all:`) -- 47.0.0+ has none yet, which
+# forces a from-source build requiring Rust + a local OpenSSL/vcpkg install that isn't
+# present here, and fails outright (see the "cargo:warning=Could not find directory of
+# OpenSSL installation" build error this pin avoids). Same class of issue as numpy/
+# soundfile's ARM64 wheel-availability pins above.
+cryptography = "46.0.3"
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]

@@ -75,7 +75,11 @@ class _QueueHandler(logging.Handler):
 class LogManager:
     """Application-wide logging: rotating log file on disk plus a live, color-coded on-screen feed."""
 
-    def __init__(self, app_log_display, level="info", max_rows=500):
+    def __init__(self, app_log_display=None, level="info", max_rows=500):
+        """`app_log_display` is a Tk Listbox to show a live color-coded feed in, or None
+        for headless use (e.g. the MCP server, or any caller with no Tk root/display at
+        all) -- logging still goes to the rotating file at LOG_FILE and add_event() works
+        exactly the same either way; only the on-screen feed is skipped."""
         os.makedirs(LOG_DIR, exist_ok=True)
         self.app_log_display = app_log_display
         self.max_rows = max_rows
@@ -100,7 +104,12 @@ class LogManager:
 
         # Scheduled here (main thread, at construction time) and re-scheduled only from
         # within its own callback, so the Tk API is never touched off the main thread.
-        self.app_log_display.after(POLL_INTERVAL_MS, self._poll_display_queue)
+        # Skipped entirely when there's no widget to update (headless use) -- there's no
+        # Tk event loop to schedule onto in the first place, and nothing would ever drain
+        # _display_queue, so entries just accumulate there harmlessly (bounded by
+        # max_rows worth of interest only when something is actually reading them).
+        if self.app_log_display is not None:
+            self.app_log_display.after(POLL_INTERVAL_MS, self._poll_display_queue)
 
     def _poll_display_queue(self):
         try:
