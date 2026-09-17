@@ -125,7 +125,7 @@ class SettingsDrawer(ttk.Frame):
     # -- Voice tab -----------------------------------------------------------------
 
     def _build_engine_section(self, parent):
-        frame = ttk.Labelframe(parent, text="Engine", padding=10, bootstyle="primary")
+        frame = ttk.Labelframe(parent, text="Engine (default for new files)", padding=10, bootstyle="primary")
         frame.pack(fill="x")
         ttk.Radiobutton(
             frame, text="Piper (natural, offline neural voice)", variable=self.engine_var, value="piper"
@@ -184,7 +184,7 @@ class SettingsDrawer(ttk.Frame):
 
         row = ttk.Frame(frame)
         row.pack(fill="x")
-        ttk.Label(row, text="Active voice:").pack(side="left")
+        ttk.Label(row, text="Default voice:").pack(side="left")
         self.voice_menu = ttk.Combobox(row, textvariable=self.voice_var, state="readonly", width=20)
         self.voice_menu.pack(side="left", padx=(6, 6))
         ttk.Button(row, text="✕", width=3, command=self._delete_voice, bootstyle="danger-outline").pack(side="left")
@@ -393,13 +393,13 @@ class SettingsDrawer(ttk.Frame):
         ).pack(fill="x", pady=(0, 6))
         ttk.Button(
             reset, text="↺ Reset Voice Settings", command=self._reset_voice_settings, bootstyle="secondary-outline"
-        ).pack(fill="x", pady=(0, 6))
-        ttk.Button(
-            reset, text="↺ Reset Appearance", command=self._reset_appearance, bootstyle="secondary-outline"
         ).pack(fill="x", pady=(0, 10))
         ttk.Button(reset, text="↺ Reset Everything", command=self._reset_everything, bootstyle="danger").pack(
             fill="x"
         )
+        # No separate "Reset Appearance" button: appearance only ever has two states
+        # (Light/Dark), so clicking "Light" above already is the reset -- a dedicated
+        # button for a two-way toggle was pure redundancy.
 
     def _open_save_folder(self):
         try:
@@ -429,11 +429,6 @@ class SettingsDrawer(ttk.Frame):
             self.expr_var.set(Config.DEFAULTS["expressiveness"])
             self._loading = False
             self.logger.add_event("info", "Voice settings reset to defaults")
-
-    def _reset_appearance(self):
-        if messagebox.askyesno("Reset Appearance", "Switch back to the default light appearance?"):
-            self.appearance_var.set("light")
-            self._apply_appearance()
 
     def _reset_everything(self):
         if messagebox.askyesno(
