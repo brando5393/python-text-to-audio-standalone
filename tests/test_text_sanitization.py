@@ -212,6 +212,106 @@ def test_strips_bullet_point_glyphs_but_keeps_the_list_text():
     assert "Milk" in result and "Eggs" in result and "Bread" in result
 
 
+def test_decodes_leftover_html_entities():
+    """Regression scenario: text pulled from web-sourced content (an HTML/EPUB file, or a
+    document originally copy-pasted from a web page) sometimes carries literal HTML
+    entities that were never decoded, which a TTS engine would otherwise read as gibberish
+    ("ampersand a m p semicolon") instead of the character they represent."""
+    text = "Rock &amp; Roll wasn&#39;t always called that &mdash; ask anyone."
+    result = TextSanitization.sanitize(text)
+    assert "&amp;" not in result and "&#39;" not in result and "&mdash;" not in result
+    assert "Rock & Roll wasn't always called that" in result
+
+
+def test_keeps_ordinary_ampersands_that_are_not_html_entities():
+    """A bare ampersand in ordinary prose ("AT&T", "Q&A") must never be mistaken for an
+    HTML entity -- only a real entity pattern (a name or numeric reference terminated by
+    a semicolon) is ever decoded."""
+    text = "AT&T ran a Q&A session, and sales & marketing both attended."
+    assert TextSanitization.sanitize(text) == text
+
+
+def test_strips_zero_width_and_invisible_formatting_characters():
+    """Regression scenario: copy-pasted or web-derived text sometimes carries truly
+    invisible Unicode characters (zero-width space, zero-width joiner, a stray byte-order
+    mark) that a human proofreading the source text would never see, since they render as
+    nothing, but which can make a TTS engine stumble or insert an odd pause."""
+    text = "This is a normal​ sentence﻿ with hidden‍ characters‌ inside."
+    result = TextSanitization.sanitize(text)
+    assert "​" not in result and "﻿" not in result
+    assert "‍" not in result and "‌" not in result
+    assert "This is a normal sentence with hidden characters inside." in result
+
+
+def test_strips_soft_hyphens_without_touching_real_hyphens():
+    """A soft hyphen (a discretionary line-break point) is invisible in normal rendering
+    but sometimes leaks into extracted text as a literal character embedded mid-word
+    ("respon­sibility"), regardless of whether the word ever actually wrapped there.
+    A real hyphen in a compound word must be left completely untouched."""
+    text = "It was her respon­sibility to finish the well-known task on time."
+    result = TextSanitization.sanitize(text)
+    assert "­" not in result
+    assert "responsibility" in result
+    assert "well-known" in result
+
+
+def test_strips_symbol_divider_lines_but_keeps_real_content():
+    """Regression scenario: both scanned and born-digital books commonly mark a
+    scene/section break with a line of repeated symbol glyphs ("* * *", "-----",
+    "======") instead of real words. Read verbatim, a TTS engine either spells out the
+    glyph name or reads a long run of "asterisk" or "dash", which is never useful."""
+    text = "The chapter ends here.\n* * *\nA new scene begins.\n------\nAnd another one starts."
+    result = TextSanitization.sanitize(text)
+    assert "* * *" not in result
+    assert "------" not in result
+    assert "The chapter ends here." in result
+    assert "A new scene begins." in result
+    assert "And another one starts." in result
+
+
+def test_keeps_ordinary_sentences_with_punctuation_that_are_not_pure_dividers():
+    """A line-start em dash (dialogue) or a sentence that merely contains punctuation must
+    never be mistaken for a symbol-divider line -- only a line made ENTIRELY of one
+    repeated symbol (optionally space-separated), 3+ times, qualifies."""
+    text = "Wait... what did you just say?\nShe said, \"No -- not that one.\"\nMaybe... just maybe."
+    assert TextSanitization.sanitize(text) == text
+
+
+def test_strips_stray_unicode_replacement_characters():
+    """Regression scenario: a document saved or transcoded with the wrong encoding at some
+    earlier step produces the Unicode replacement character (U+FFFD) wherever a byte
+    sequence couldn't be decoded at all. Unlike mojibake, this data is already
+    unrecoverable by the time sanitize() sees it -- ftfy deliberately leaves it alone --
+    so the best outcome is closing the gap rather than reading it aloud as a glitch."""
+    text = "The na�ve traveler set out at dawn� and never looked back."
+    result = TextSanitization.sanitize(text)
+    assert "�" not in result
+    assert "The na" in result and "traveler set out at dawn" in result and "never looked back." in result
+
+
+def test_realistic_scanned_ebook_excerpt_end_to_end():
+    """Integration-style scenario resembling a real scanned/web-sourced ebook chapter:
+    a scene-break divider, leftover HTML entities from a web-to-PDF conversion, a
+    zero-width space and a soft hyphen from copy-pasted formatting, and ordinary prose
+    with a genuine hyphenated name -- all in one passage, the way the other high-value
+    regression tests in this file combine several real symptoms into one check."""
+    text = (
+        "Chapter 3\n"
+        "* * *\n"
+        "Mrs. Bennet & her daughters wasn&#39;t going to miss the ball.\n"
+        "It was her respon­sibility to see Anne-\nMarie dressed in time,​ and she "
+        "intended to see it done."
+    )
+    result = TextSanitization.sanitize(text)
+    assert "* * *" not in result
+    assert "&" in result and "&#39;" not in result and "wasn't" in result
+    assert "responsibility" in result
+    assert "­" not in result and "​" not in result
+    assert "Anne-\nMarie" in result or "Anne-Marie" in result
+    assert "AnneMarie" not in result
+    assert "she intended to see it done." in result
+
+
 def test_keeps_dialogue_dashes_at_line_start():
     """French/European-style dialogue sometimes marks a new speaker with a leading dash
     or em dash at the start of a line, which is real, meaningful content and must never

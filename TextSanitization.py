@@ -1,3 +1,4 @@
+import html
 import re
 import unicodedata
 from collections import Counter
@@ -25,6 +26,44 @@ _REPEATED_WORD = re.compile(r"\b(\w+)(\s+\1\b)+", re.IGNORECASE)
 # odd TTS output. Tab and newline are handled separately by the caller's own whitespace
 # collapsing, so they're deliberately left out here.
 _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]")
+
+# Truly invisible Unicode formatting characters (zero-width space/joiner/non-joiner, word
+# joiner, byte-order-mark-as-zero-width-no-break-space, left/right-to-left marks) that
+# survive copy-pasted HTML/EPUB content and web-sourced PDFs. Unlike NBSP (U+00A0), which
+# NFKC normalization already decomposes to a plain space, these have no compatibility
+# decomposition at all and pass straight through both ftfy and NFKC untouched -- they
+# render as nothing visually, so a human proofreading the source text would never even
+# see them, but some TTS engines stumble on them (odd pauses or a spoken glyph name).
+# Dropping them is unconditionally safe: by definition they carry no visible content.
+_ZERO_WIDTH_CHARS = re.compile(
+    "[" + "".join(chr(cp) for cp in (0x200B, 0x200C, 0x200D, 0x200E, 0x200F, 0x2060, 0xFEFF)) + "]"
+)
+
+# A soft hyphen (U+00AD) marks a discretionary line-break point and is invisible when a
+# word isn't actually broken there -- word processors and PDF generators routinely leave
+# these embedded mid-word (e.g. "respon<soft-hyphen>sibility") whether or not the line ever wraps
+# at that point. Left in, some TTS engines read it as a literal hyphen or stumble on it.
+# Removed outright rather than treated like the line-wrap hyphen above: a soft hyphen is
+# never meant to be visible/spoken in the first place, so there's no "keep it as a real
+# hyphen" case to preserve the way there is for a genuine hyphenated compound word.
+_SOFT_HYPHEN = re.compile(chr(0x00AD))
+
+# U+FFFD, the Unicode replacement character, is what Python's own decoder (and many other
+# tools) substitutes for a byte sequence it could not decode at all -- the original data is
+# already gone by the time this text reaches sanitize(), so unlike everything else in this
+# module there is no "real content" to protect here; ftfy repairs recoverable mojibake but
+# deliberately leaves U+FFFD alone since it represents genuinely unrecoverable data, not a
+# reversible encoding mistake. Left in, a TTS engine reads it as a stray question-mark-like
+# glyph or an audible glitch, which is worse than just silently closing the gap.
+_REPLACEMENT_CHAR = re.compile(chr(0xFFFD))
+
+# A scene-break/section-divider line rendered as repeated symbol glyphs with no real words
+# at all ("* * *", "-----", "======", "~ ~ ~ ~") -- a common convention in both scanned and
+# born-digital books to mark a break between sections, never meant to be read aloud. Requires
+# the *entire* stripped line to be one repeated symbol (optionally space-separated) and at
+# least 3 repeats, which is what keeps this from ever matching a real sentence or a genuine
+# em-dash dialogue line (those contain real words, not just the symbol over and over).
+_SYMBOL_DIVIDER_LINE = re.compile(r"^([*\-=~#_.•])(\s*\1){2,}\s*$")
 
 # Some PDFs don't encode real line breaks around structural content at all -- a table of
 # contents can extract as one continuous run of text with no newlines to split on, which
@@ -97,7 +136,11 @@ def sanitize(text):
     across a PDF line wrap get read as two nonsense fragments, footnote/citation markers
     (bracketed, superscript, or glued onto sentence-ending punctuation) get read aloud as
     stray numbers, and bullet-point glyphs get skipped or mispronounced instead of just
-    being dropped.
+    being dropped. Also handles: literal HTML entities left over from web-sourced content
+    ("&amp;", "&#39;"), invisible zero-width/formatting characters and soft hyphens that
+    survive copy-pasted or web-derived text untouched by NFKC, ASCII scene-break/divider
+    lines ("* * *", "-----") that carry no content of their own, and stray Unicode
+    replacement characters left behind by an earlier, unrecoverable decoding failure.
 
     Generic number/date/currency expansion (e.g. "$5.99" -> "five dollars and ninety nine
     cents") is deliberately not attempted here: both TTS engines this app supports
@@ -117,9 +160,13 @@ def sanitize(text):
     text = _SUPERSCRIPT_DIGITS.sub("", text)
     text = _GLUED_FOOTNOTE_NUMBER.sub(". ", text)
 
+    text = html.unescape(text)  # leftover literal entities ("&amp;", "&#39;") from web-sourced content
     text = ftfy.fix_text(text)  # fixes mojibake/broken encodings from bad extraction
     text = unicodedata.normalize("NFKC", text)  # ligatures (ﬁ -> fi), compatibility forms
     text = _CONTROL_CHARS.sub("", text)
+    text = _ZERO_WIDTH_CHARS.sub("", text)
+    text = _SOFT_HYPHEN.sub("", text)
+    text = _REPLACEMENT_CHAR.sub("", text)
 
     text = _REPEATED_LETTER.sub(r"\1\1", text)
     text = _REPEATED_WORD.sub(r"\1", text)
@@ -189,6 +236,8 @@ def _drop_boilerplate_lines(lines):
         if not stripped:
             kept.append(line)
         elif _DOT_LEADER_LINE.match(stripped) or _PAGE_NUMBER_LINE.match(stripped):
+            continue
+        elif _SYMBOL_DIVIDER_LINE.match(stripped):
             continue
         elif repeat_counts.get(stripped, 0) >= _REPEATED_LINE_MIN_COUNT:
             continue
