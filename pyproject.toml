@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "talebrew"
-version = "0.1.0"
+version = "0.2.0"
 description = "Talebrew: every story, brewed aloud. Converts text, PDF, and ebook files to audio using offline text-to-speech."
 authors = ["Brandon Williams"]
 package-mode = false
