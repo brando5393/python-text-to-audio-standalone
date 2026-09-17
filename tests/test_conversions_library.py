@@ -76,7 +76,7 @@ def test_voice_column_reads_sidecar_metadata(tk_root, tmp_path):
 
     for item in tree.get_children(""):
         if tree.item(item, "text") == "chapter.wav":
-            assert tree.item(item, "values")[0] == "Ryan (US, high)"
+            assert tree.item(item, "values")[2] == "Ryan (US, high)"
 
 
 def test_sidecar_json_files_are_not_listed_as_entries(tk_root, tmp_path):
@@ -99,7 +99,28 @@ def test_files_without_sidecar_show_blank_voice(tk_root, tmp_path):
 
     for item in tree.get_children(""):
         if tree.item(item, "text") == "old_file.wav":
-            assert tree.item(item, "values")[0] == ""
+            assert tree.item(item, "values") == ("", "", "")
+
+
+def test_pages_and_chapters_columns_read_sidecar_metadata(tk_root, tmp_path):
+    (tmp_path / "book.wav").write_bytes(b"data")
+    (tmp_path / "book.wav.json").write_text(
+        json.dumps({"voice_label": "Ryan (US, high)", "text": "hi", "pages": 301, "chapters": None})
+    )
+    (tmp_path / "novel.wav").write_bytes(b"data")
+    (tmp_path / "novel.wav.json").write_text(
+        json.dumps({"voice_label": "Amy (US, medium)", "text": "hi", "pages": None, "chapters": 12})
+    )
+
+    tree = ttk.Treeview(tk_root, show="tree")
+    lib = ConversionsLibrary(tree, str(tmp_path))
+
+    for item in tree.get_children(""):
+        name = tree.item(item, "text")
+        if name == "book.wav":
+            assert tree.item(item, "values") == ("301", "", "Ryan (US, high)")
+        elif name == "novel.wav":
+            assert tree.item(item, "values") == ("", "12", "Amy (US, medium)")
 
 
 def test_text_for_reads_stored_source_text(tk_root, tmp_path):

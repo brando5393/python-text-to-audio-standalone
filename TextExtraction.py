@@ -38,6 +38,58 @@ def extract_text(file_path):
     raise ValueError(f"Unsupported file type: {ext}")
 
 
+def extract_structure_counts(file_path):
+    """Returns (pages, chapters) for a document -- whichever concept applies to its
+    format, None for the other. Cheap: reads structural metadata, not the full text.
+    """
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext == ".pdf":
+        return _count_pdf_pages(file_path), None
+    if ext == ".epub":
+        return None, _count_epub_chapters(file_path)
+    if ext in (".mobi", ".azw3"):
+        return _count_mobi_structure(file_path)
+    if ext == ".docx":
+        return None, _count_docx_chapters(file_path)
+    return None, None
+
+
+def _count_pdf_pages(path):
+    with open(path, "rb") as pdf_file:
+        return len(pypdf.PdfReader(pdf_file).pages)
+
+
+def _count_epub_chapters(path):
+    # get_items_of_type(ITEM_DOCUMENT) also includes the navigation document itself
+    # (a table of contents page, not a chapter) -- is_chapter() is False only for that.
+    book = epub.read_epub(path)
+    return sum(1 for item in book.get_items_of_type(ITEM_DOCUMENT) if item.is_chapter())
+
+
+def _count_docx_chapters(path):
+    # A rough but cheap heuristic: "Heading 1" is the conventional Word style for chapter
+    # titles. None (not 0) when nothing matches -- an undetected chapter count is more
+    # honestly "unknown" than "zero".
+    document = docx.Document(path)
+    count = sum(1 for p in document.paragraphs if p.style and p.style.name == "Heading 1")
+    return count or None
+
+
+def _count_mobi_structure(path):
+    import mobi
+
+    tempdir, extracted_path = mobi.extract(path)
+    try:
+        ext = os.path.splitext(extracted_path)[1].lower()
+        if ext == ".epub":
+            return None, _count_epub_chapters(extracted_path)
+        if ext == ".pdf":
+            return _count_pdf_pages(extracted_path), None
+        return None, None
+    finally:
+        shutil.rmtree(tempdir, ignore_errors=True)
+
+
 def _extract_txt(path):
     with open(path, "r", encoding="utf-8") as txt_file:
         return txt_file.read()

@@ -1,6 +1,7 @@
 import os
 
 import docx
+import pypdf
 import pytest
 from ebooklib import epub
 
@@ -86,3 +87,66 @@ def test_supported_extensions_are_all_lowercase_with_dot():
     for ext in te.SUPPORTED_EXTENSIONS:
         assert ext.startswith(".")
         assert ext == ext.lower()
+
+
+def _make_pdf(path, num_pages):
+    writer = pypdf.PdfWriter()
+    for _ in range(num_pages):
+        writer.add_blank_page(width=200, height=200)
+    with open(path, "wb") as f:
+        writer.write(f)
+
+
+def _make_epub(path, num_chapters):
+    book = epub.EpubBook()
+    book.set_identifier("id1")
+    book.set_title("Test Book")
+    book.set_language("en")
+    chapters = []
+    for i in range(num_chapters):
+        chapter = epub.EpubHtml(title=f"Chapter {i + 1}", file_name=f"chap{i + 1}.xhtml", lang="en")
+        chapter.content = f"<h1>Chapter {i + 1}</h1><p>Content for chapter {i + 1}.</p>"
+        book.add_item(chapter)
+        chapters.append(chapter)
+    book.toc = tuple(chapters)
+    book.add_item(epub.EpubNcx())
+    book.add_item(epub.EpubNav())
+    book.spine = ["nav"] + chapters
+    epub.write_epub(str(path), book)
+
+
+def test_extract_structure_counts_pdf_returns_page_count(tmp_path):
+    path = tmp_path / "doc.pdf"
+    _make_pdf(path, 5)
+    assert te.extract_structure_counts(str(path)) == (5, None)
+
+
+def test_extract_structure_counts_epub_returns_chapter_count(tmp_path):
+    path = tmp_path / "book.epub"
+    _make_epub(path, 4)
+    assert te.extract_structure_counts(str(path)) == (None, 4)
+
+
+def test_extract_structure_counts_docx_counts_heading_1_paragraphs(tmp_path):
+    doc = docx.Document()
+    doc.add_paragraph("Chapter One", style="Heading 1")
+    doc.add_paragraph("Some prose here.")
+    doc.add_paragraph("Chapter Two", style="Heading 1")
+    doc.add_paragraph("More prose here.")
+    path = tmp_path / "doc.docx"
+    doc.save(str(path))
+    assert te.extract_structure_counts(str(path)) == (None, 2)
+
+
+def test_extract_structure_counts_docx_returns_none_without_headings(tmp_path):
+    doc = docx.Document()
+    doc.add_paragraph("Just a plain paragraph with no heading style.")
+    path = tmp_path / "doc.docx"
+    doc.save(str(path))
+    assert te.extract_structure_counts(str(path)) == (None, None)
+
+
+def test_extract_structure_counts_txt_returns_none_none(tmp_path):
+    path = tmp_path / "note.txt"
+    path.write_text("Plain text content.", encoding="utf-8")
+    assert te.extract_structure_counts(str(path)) == (None, None)

@@ -126,7 +126,14 @@ class Converter:
                 chunks = TextChunking.split_into_chunks(clean_text)
                 base_name = os.path.splitext(os.path.basename(file))[0]
                 output_file = os.path.join(output_dir, base_name + ".wav")
-                plan.append({"file": file, "chunks": chunks, "output_file": output_file, "text": clean_text})
+                try:
+                    pages, chapters = TextExtraction.extract_structure_counts(file)
+                except Exception:
+                    pages, chapters = None, None  # a display-only convenience; never worth failing the conversion over
+                plan.append({
+                    "file": file, "chunks": chunks, "output_file": output_file, "text": clean_text,
+                    "pages": pages, "chapters": chapters,
+                })
             except Exception as e:
                 error_message = f"Failed to read '{file}': {str(e)}"
                 self.logger.add_event("error", error_message)
@@ -146,13 +153,17 @@ class Converter:
                 global_done = self._convert_one(
                     item["file"], item["chunks"], item["output_file"], item["text"],
                     use_piper, settings, global_done, total_chunks, start_time,
+                    item["pages"], item["chapters"],
                 )
             except Exception as e:
                 error_message = f"Failed to convert file '{item['file']}' to audio: {str(e)}"
                 self.logger.add_event("error", error_message)
                 self._events.put(("error", item["file"], str(e)))
 
-    def _convert_one(self, file, chunks, output_file, text, use_piper, settings, global_done, total_chunks, start_time):
+    def _convert_one(
+        self, file, chunks, output_file, text, use_piper, settings, global_done, total_chunks, start_time,
+        pages=None, chapters=None,
+    ):
         # Each chunk's audio is appended to a scratch PCM file as soon as it's synthesized,
         # with a small sidecar tracking how many chunks are already in it. If the app closes
         # (or crashes) mid-file, that scratch file and sidecar survive -- reconverting the
@@ -263,7 +274,7 @@ class Converter:
                 pass
 
         self.logger.add_event("info", "File converted successfully", f"{engine_label} -> {output_file}")
-        _write_sidecar(output_file, text, resume_use_piper, resume_settings)
+        _write_sidecar(output_file, text, resume_use_piper, resume_settings, pages, chapters)
         self._events.put(("done", file, output_file))
         return global_done
 
@@ -307,13 +318,14 @@ class Converter:
             raise error_box[0]
 
 
-def _write_sidecar(output_file, text, use_piper, settings):
+def _write_sidecar(output_file, text, use_piper, settings, pages=None, chapters=None):
     """Stores the voice used and the exact text synthesized alongside the audio file.
 
     This is what lets the Conversions Library show which voice made a file, and lets a
     file be re-synthesized in a different voice later without needing the original
     document again -- otherwise a converted file is permanently locked to whatever voice
     was selected the moment it was made, defeating the point of being able to change voices.
+    Also carries page/chapter counts for display, when the source format has them.
     """
     voice_label = PiperEngine.FRIENDLY_NAMES.get(settings["voice"], settings["voice"]) if use_piper else "System voice"
     sidecar = {
@@ -321,6 +333,8 @@ def _write_sidecar(output_file, text, use_piper, settings):
         "voice_id": settings["voice"] if use_piper else None,
         "voice_label": voice_label,
         "text": text,
+        "pages": pages,
+        "chapters": chapters,
     }
     try:
         with open(output_file + ".json", "w", encoding="utf-8") as f:

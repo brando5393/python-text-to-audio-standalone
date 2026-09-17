@@ -14,10 +14,14 @@ class ConversionsLibrary:
         self._item_data = {}  # item id -> (path, "dir"/"file"); kept off the Treeview's own
         # "values" so that column stays free to show the voice label instead.
 
-        self.tree["columns"] = ("voice",)
+        self.tree["columns"] = ("pages", "chapters", "voice")
         self.tree["show"] = "tree headings"
         self.tree.heading("#0", text="Conversions", anchor="w")
+        self.tree.heading("pages", text="Pages", anchor="w")
+        self.tree.heading("chapters", text="Chapters", anchor="w")
         self.tree.heading("voice", text="Voice", anchor="w")
+        self.tree.column("pages", width=55, anchor="w", stretch=False)
+        self.tree.column("chapters", width=70, anchor="w", stretch=False)
         self.tree.column("voice", width=130, anchor="w", stretch=False)
 
         # Tk PhotoImage objects must stay referenced or Tk garbage-collects them and the
@@ -58,18 +62,22 @@ class ConversionsLibrary:
                 # A ".partial" file is a conversion still in progress (see Converter.py);
                 # hide it so a mid-conversion refresh can't be mistaken for a finished file.
                 kwargs = {"image": self._audio_icon} if self._audio_icon is not None else {}
-                node = self.tree.insert(
-                    parent_id, "end", text=entry.name, values=(self._voice_label_for(entry.path),), **kwargs
+                sidecar = self._sidecar_for(entry.path)
+                values = (
+                    sidecar.get("pages") or "",
+                    sidecar.get("chapters") or "",
+                    sidecar.get("voice_label") or "",
                 )
+                node = self.tree.insert(parent_id, "end", text=entry.name, values=values, **kwargs)
                 self._item_data[node] = (entry.path, "file")
 
     @staticmethod
-    def _voice_label_for(audio_path):
+    def _sidecar_for(audio_path):
         try:
             with open(audio_path + ".json", "r", encoding="utf-8") as f:
-                return json.load(f).get("voice_label", "")
+                return json.load(f)
         except (OSError, json.JSONDecodeError):
-            return ""  # No sidecar -- likely converted before this feature existed.
+            return {}  # No sidecar -- likely converted before this feature existed.
 
     def path_for(self, item_id):
         """Returns (path, kind) for a tree item, where kind is 'dir' or 'file'."""
@@ -82,8 +90,4 @@ class ConversionsLibrary:
         path, kind = self.path_for(item_id)
         if kind != "file":
             return None
-        try:
-            with open(path + ".json", "r", encoding="utf-8") as f:
-                return json.load(f).get("text") or None
-        except (OSError, json.JSONDecodeError):
-            return None
+        return self._sidecar_for(path).get("text") or None
