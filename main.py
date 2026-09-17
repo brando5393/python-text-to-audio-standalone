@@ -169,9 +169,11 @@ def refresh_library():
     library.refresh()
 
 
-def start_conversion(files, output_dir):
+def start_conversion(files, output_dir, split_chapters=False):
     """Shared by a normal Convert click, a re-convert, and resuming an interrupted batch
-    from last session -- all three just need a file list and a destination."""
+    from last session -- all three just need a file list and a destination. Re-convert
+    and batch-resume never split into chapters (the source is already a single audio
+    file's stored text by that point, with no chapter structure left to find)."""
     global progress_dialog
 
     # A re-convert overwrites the same output file it's re-synthesizing, and Windows
@@ -191,14 +193,14 @@ def start_conversion(files, output_dir):
 
     ConversionQueue.save(files, output_dir)
     progress_dialog = ProgressDialog(app, converter, len(files))
-    converter.convert_to_audio(files, output_dir)
+    converter.convert_to_audio(files, output_dir, split_chapters=split_chapters)
 
 
 def do_convert():
     if not explorer.file_list:
         logger.add_event("warn", "No files queued for conversion")
         return
-    start_conversion(explorer.file_list, explorer.download_directory)
+    start_conversion(explorer.file_list, explorer.download_directory, split_chapters=split_chapters_var.get())
     explorer.clear_files()
 
 
@@ -650,10 +652,21 @@ del_all_btn = ttk.Button(
 )
 convert_btn = ttk.Button(controls_frame, text="▶ Convert to Audio", bootstyle="success", command=do_convert)
 
+split_chapters_var = tk.BooleanVar(value=False)
+split_chapters_check = ttk.Checkbutton(
+    controls_frame, text="Split into chapter files", variable=split_chapters_var, bootstyle="round-toggle",
+)
+split_chapters_hint = ttk.Label(
+    controls_frame, text="EPUB/DOCX/MOBI/AZW3 only;\nother formats convert as one file",
+    bootstyle="secondary", justify="left", font=("Segoe UI", 8),
+)
+
 add_files_btn.grid(row=0, column=0, sticky="ew", pady=(0, 6))
 del_file_btn.grid(row=1, column=0, sticky="ew", pady=(0, 6))
 del_all_btn.grid(row=2, column=0, sticky="ew", pady=(0, 6))
-convert_btn.grid(row=3, column=0, sticky="ew", ipady=4)
+split_chapters_check.grid(row=3, column=0, sticky="w", pady=(0, 2))
+split_chapters_hint.grid(row=4, column=0, sticky="w", pady=(0, 6))
+convert_btn.grid(row=5, column=0, sticky="ew", ipady=4)
 controls_frame.columnconfigure(0, weight=1)
 
 logger.add_event("info", "Application started successfully")
