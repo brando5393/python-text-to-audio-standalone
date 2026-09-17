@@ -495,12 +495,21 @@ readable at a glance. Here's what's actually been verified, and what isn't there
 Verified:
 - Every control (buttons, dropdowns, sliders) can be reached and operated with Tab / Shift+Tab \
 and Enter/Space, and file and folder lists respond to arrow keys once focused.
-- Text and background colors meet WCAG AA contrast (4.5:1) in both the light and dark themes. \
-This was measured directly: one accent color fell short at 2.25:1 and was darkened until it passed.
+- Every icon-only-looking button also carries a text label next to its glyph (e.g. "⬇ Get", \
+"✕ Delete"), so its purpose doesn't depend on recognizing the icon.
+- Text and background colors meet WCAG AA contrast (4.5:1) in both the light and dark themes, \
+including the queued-files list's per-file voice-override coloring and the activity log's \
+per-level colors -- each checked directly against both themes' real backgrounds, not just \
+eyeballed. Three colors have been darkened or replaced after failing that check: the "warning" \
+accent (was 2.25:1), the file list's override color (a literal "blue" that was only ever 1.83:1 \
+on the dark theme), and the log's per-level colors (INFO in particular was only ~1.09:1 on the \
+dark theme, since the original palette was checked against the light theme alone).
 - Status is never color only. Log entries carry a text label (INFO, WARNING, ERROR) alongside \
-their color.
-- The "Larger text" toggle above scales UI text app-wide, and speech rate is adjustable \
-separately in the Voice tab.
+their color, and a queued file with its own voice override is also labeled in text \
+(e.g. "[Piper: Ryan]"), not just colored differently.
+- The "Larger text" toggle above scales UI text app-wide, including the Conversions Library \
+list's row height (a ttk Treeview doesn't resize that on its own when the font changes -- this \
+had to be handled explicitly), and speech rate is adjustable separately in the Voice tab.
 - Sound cues mark app-ready, conversion-done, error, and exit moments audibly, which helps if \
 the window isn't in view. Toggle them off above if you'd rather not have them.
 
