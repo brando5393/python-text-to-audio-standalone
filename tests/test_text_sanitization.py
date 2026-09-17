@@ -117,3 +117,106 @@ def test_one_off_glued_word_is_not_mistaken_for_a_watermark():
     text = "the chapter ends. 1 / 50Suddenly, everything changed for the better."
     result = TextSanitization.sanitize(text)
     assert "Suddenly, everything changed for the better." in result
+
+
+def test_rejoins_word_broken_across_a_pdf_line_wrap():
+    """Regression scenario: many PDFs wrap justified text mid-word at the right margin,
+    extracting a trailing hyphen immediately before the line's newline ("exam-\\nple").
+    Read verbatim, this becomes two nonsense fragments instead of one word."""
+    text = "This is a good exam-\nple of the problem, and another exam-\n   ple right after."
+    result = TextSanitization.sanitize(text)
+    assert "example of the problem" in result
+    assert "example right after" in result
+    assert "exam-" not in result
+
+
+def test_keeps_a_real_hyphenated_name_split_across_a_line_wrap():
+    """A genuine hyphenated proper noun that happens to fall at a line break ("Anne-\\nMarie")
+    must not be silently fused into "AnneMarie" -- the capital letter after the break is
+    what distinguishes it from an ordinary broken word, which always continues lowercase."""
+    text = "Her full name was Anne-\nMarie, and everyone called her that."
+    result = TextSanitization.sanitize(text)
+    assert "Anne-\nMarie" in result or "Anne-Marie" in result
+    assert "AnneMarie" not in result
+
+
+def test_keeps_mid_sentence_hyphenated_compound_words_untouched():
+    """Ordinary compound words that are NOT split across a line wrap (no newline glued to
+    the hyphen) must never be touched by the line-wrap fix, which only ever fires on a
+    hyphen immediately followed by a newline."""
+    text = "It was a well-known fact that she was a strong-willed, self-aware woman."
+    assert TextSanitization.sanitize(text) == text
+
+
+def test_strips_bracketed_numeric_citation_markers():
+    """Regression scenario: academic PDFs and articles often render footnote/citation
+    references as bracketed numbers inline ("the theory[12] is well established."), which
+    sound like stray digits when read aloud and carry no meaning in an audio narration."""
+    text = "The theory[12] is well established, though later work[3, 4] complicates it."
+    result = TextSanitization.sanitize(text)
+    assert "[12]" not in result
+    assert "[3, 4]" not in result
+    assert "The theory is well established" in result
+    assert "though later work complicates it" in result
+
+
+def test_keeps_non_numeric_bracketed_stage_directions():
+    """A bracketed annotation that contains letters, not digits, is real content meant to
+    be read (or at least isn't a citation marker) -- e.g. transcript stage directions like
+    "[Laughter]" or an editorial "[sic]" -- and must be left alone."""
+    text = "That was hilarious [Laughter]. The article said the the [sic] answer was wrong."
+    result = TextSanitization.sanitize(text)
+    assert "[Laughter]" in result
+    assert "[sic]" in result
+
+
+def test_strips_superscript_footnote_markers():
+    """A footnote marker is sometimes extracted as literal superscript Unicode digits
+    glued directly onto a word ("the effect¹² was profound"), which is an
+    unambiguous non-prose signal since ordinary sentences never contain superscript
+    digits."""
+    text = "The effect¹² was profound, though critics³ disagreed."
+    result = TextSanitization.sanitize(text)
+    assert "¹" not in result and "²" not in result and "³" not in result
+    assert "The effect was profound" in result
+    assert "though critics disagreed" in result
+
+
+def test_strips_footnote_number_glued_between_sentences():
+    """Regression scenario: a footnote number sometimes extracts as a plain digit glued
+    directly onto the end of one sentence and the start of the next with no separating
+    space at all ("...well established.12The next paragraph begins here.")."""
+    text = "The theory is well established.12The next paragraph begins here."
+    result = TextSanitization.sanitize(text)
+    assert "established.12The" not in result
+    assert "The theory is well established." in result
+    assert "The next paragraph begins here." in result
+
+
+def test_keeps_decimal_numbers_that_precede_a_capitalized_word():
+    """A decimal number must never be mistaken for a glued footnote marker -- the digit
+    before the decimal point (not a lowercase letter) is what rules this out, since real
+    footnote markers only ever follow the end of a word, not another digit."""
+    text = "The kit weighs 3.14Kilograms when fully assembled."
+    result = TextSanitization.sanitize(text)
+    assert "3.14Kilograms" in result
+
+
+def test_strips_bullet_point_glyphs_but_keeps_the_list_text():
+    """Bullet glyphs extracted from a PDF/EPUB list ("• First item") are either
+    skipped silently or mispronounced by a TTS engine; the glyph should be dropped while
+    the real list content after it is kept and still read aloud."""
+    text = "Shopping list:\n• Milk\n• Eggs\n◦ Bread"
+    result = TextSanitization.sanitize(text)
+    assert "•" not in result and "◦" not in result
+    assert "Milk" in result and "Eggs" in result and "Bread" in result
+
+
+def test_keeps_dialogue_dashes_at_line_start():
+    """French/European-style dialogue sometimes marks a new speaker with a leading dash
+    or em dash at the start of a line, which is real, meaningful content and must never
+    be stripped the way an actual bullet glyph is."""
+    text = "— Are you coming? she asked.\n— Not yet, he replied."
+    result = TextSanitization.sanitize(text)
+    assert "— Are you coming?" in result
+    assert "— Not yet, he replied." in result
