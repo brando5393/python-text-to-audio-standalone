@@ -643,14 +643,18 @@ apply_text_scale(Config.load()["large_text"])
 
 update_banner = UpdateBanner(app, logger, on_before_install_quit=quit_for_update)
 
-add_files_btn = ttk.Button(controls_frame, text="+ Add Files", command=explorer.add_files, bootstyle="primary")
+add_files_btn = ttk.Button(
+    controls_frame, text="+ Add Files (Ctrl+O)", command=explorer.add_files, bootstyle="primary"
+)
 del_file_btn = ttk.Button(
-    controls_frame, text="− Remove Selected", command=explorer.remove_file, bootstyle="secondary-outline"
+    controls_frame, text="− Remove Selected (Del)", command=explorer.remove_file, bootstyle="secondary-outline"
 )
 del_all_btn = ttk.Button(
     controls_frame, text="✕ Remove All", command=explorer.clear_files, bootstyle="secondary-outline"
 )
-convert_btn = ttk.Button(controls_frame, text="▶ Convert to Audio", bootstyle="success", command=do_convert)
+convert_btn = ttk.Button(
+    controls_frame, text="▶ Convert to Audio (Ctrl+Enter)", bootstyle="success", command=do_convert
+)
 
 split_chapters_var = tk.BooleanVar(value=False)
 split_chapters_check = ttk.Checkbutton(
@@ -668,6 +672,19 @@ split_chapters_check.grid(row=3, column=0, sticky="w", pady=(0, 2))
 split_chapters_hint.grid(row=4, column=0, sticky="w", pady=(0, 6))
 convert_btn.grid(row=5, column=0, sticky="ew", ipady=4)
 controls_frame.columnconfigure(0, weight=1)
+
+# Keyboard shortcuts for power users, mirroring what the buttons already do rather than
+# introducing new behavior -- each just calls the same function a click would. Ctrl-combos
+# are used throughout instead of bare keys (except Delete/Return, bound to specific list
+# widgets rather than app-wide) so nothing here fires while typing in a Settings drawer
+# text field. Button labels above spell out the ones most worth knowing.
+app.bind_all("<Control-o>", lambda _e: explorer.add_files())
+app.bind_all("<Control-Return>", lambda _e: do_convert())
+app.bind_all("<Control-comma>", lambda _e: toggle_settings_drawer())
+app.bind_all("<Control-p>", lambda _e: toggle_pause())
+app.bind_all("<Control-q>", lambda _e: confirm_quit())
+file_list_display.bind("<Delete>", lambda _e: explorer.remove_file())
+library_tree.bind("<Return>", play_selected_audio)  # keyboard equivalent of the existing double-click
 
 logger.add_event("info", "Application started successfully")
 SoundEffects.play("ready")
