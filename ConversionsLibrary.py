@@ -7,6 +7,56 @@ from tkinter import ttk
 _ICONS_DIR = os.path.join(os.path.dirname(__file__), "assets", "icons")
 
 
+def scan_conversions_dir(path):
+    """Returns the immediate children of `path` (one directory level only) in the same
+    order the Conversions Library tree displays them: folders before files, each group
+    sorted alphabetically, with sidecar ".json" metadata, in-progress ".pcm" scratch
+    audio, and still-converting ".partial" files filtered out. Each item is
+    (os.DirEntry, "dir"|"file").
+
+    Pulled out of ConversionsLibrary._insert_dir so the same folder-walk/filter logic
+    can be reused by a caller with no Tk widget at all (see list_conversions() below,
+    used by the MCP server) instead of being reimplemented from scratch.
+    """
+    try:
+        entries = sorted(os.scandir(path), key=lambda e: (e.is_file(), e.name.lower()))
+    except OSError:
+        return []
+    result = []
+    for entry in entries:
+        if entry.is_dir():
+            result.append((entry, "dir"))
+        elif entry.name.endswith(".json") or entry.name.endswith(".pcm") or entry.name.endswith(".partial"):
+            continue
+        else:
+            result.append((entry, "file"))
+    return result
+
+
+def list_conversions(root_dir):
+    """Recursively lists every converted audio file under root_dir with its sidecar
+    metadata (pages/chapters/voice/engine), in the same order and with the same
+    filtering as the Conversions Library tree -- for a headless caller (e.g. the MCP
+    server's list_conversions tool) that needs the same data without building any Tk
+    widgets. Reuses scan_conversions_dir() for the walk and
+    ConversionsLibrary._sidecar_for() for metadata, rather than re-deriving either."""
+    results = []
+    for entry, kind in scan_conversions_dir(root_dir):
+        if kind == "dir":
+            results.extend(list_conversions(entry.path))
+        else:
+            sidecar = ConversionsLibrary._sidecar_for(entry.path)
+            results.append({
+                "path": entry.path,
+                "name": entry.name,
+                "pages": sidecar.get("pages"),
+                "chapters": sidecar.get("chapters"),
+                "voice": sidecar.get("voice_label"),
+                "engine": sidecar.get("engine"),
+            })
+    return results
+
+
 class ConversionsLibrary:
     """Populates a ttk.Treeview with the folder/file structure under the Conversions root."""
 
@@ -67,23 +117,13 @@ class ConversionsLibrary:
         self._insert_dir("", self.root_dir)
 
     def _insert_dir(self, parent_id, path):
-        try:
-            entries = sorted(os.scandir(path), key=lambda e: (e.is_file(), e.name.lower()))
-        except OSError:
-            return
-        for entry in entries:
-            if entry.is_dir():
+        for entry, kind in scan_conversions_dir(path):
+            if kind == "dir":
                 kwargs = {"image": self._folder_icon} if self._folder_icon is not None else {}
                 node = self.tree.insert(parent_id, "end", text=entry.name, **kwargs)
                 self._item_data[node] = (entry.path, "dir")
                 self._insert_dir(node, entry.path)
-            elif entry.name.endswith(".json"):
-                continue  # Sidecar metadata for display/re-conversion, not a user-facing entry.
-            elif entry.name.endswith(".pcm"):
-                continue  # Scratch audio for a resumable in-progress conversion (see Converter.py).
-            elif not entry.name.endswith(".partial"):
-                # A ".partial" file is a conversion still in progress (see Converter.py);
-                # hide it so a mid-conversion refresh can't be mistaken for a finished file.
+            else:
                 kwargs = {"image": self._audio_icon} if self._audio_icon is not None else {}
                 sidecar = self._sidecar_for(entry.path)
                 values = (
