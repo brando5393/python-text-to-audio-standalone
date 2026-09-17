@@ -23,6 +23,9 @@ bdist_msi_options = {
     "upgrade_code": "{9C7C6C1E-6B0D-4C7B-9E6F-2B1A9F0D5A11}",
     "add_to_path": False,
     "initial_target_dir": r"[ProgramFiles64Folder]\Talebrew",
+    # Talebrew's icon in Windows' "Apps & features" / "Programs and Features" list,
+    # instead of the generic default MSI package icon.
+    "install_icon": "assets/icon.ico",
     # The Executable below already gets a Desktop shortcut (shortcut_dir="DesktopFolder");
     # this adds a second one under the Start Menu, which is where most people actually look
     # for a newly-installed app. "ProgramMenuFolder" is a predefined Windows Installer
