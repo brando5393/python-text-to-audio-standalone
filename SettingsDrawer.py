@@ -179,12 +179,15 @@ class SettingsDrawer(ttk.Frame):
         threading.Thread(target=work, daemon=True).start()
 
     def _build_voice_section(self, parent):
-        frame = ttk.Labelframe(parent, text="Voice", padding=10, bootstyle="primary")
+        # Named "Voice Library" (not just "Voice") since it sits below the Voice tab and
+        # the Engine section, both of which already say "voice" -- a third bare "Voice"
+        # here would just restate that context instead of adding anything.
+        frame = ttk.Labelframe(parent, text="Voice Library", padding=10, bootstyle="primary")
         frame.pack(fill="x", pady=(10, 0))
 
         row = ttk.Frame(frame)
         row.pack(fill="x")
-        ttk.Label(row, text="Default voice:").pack(side="left")
+        ttk.Label(row, text="Default:").pack(side="left")
         self.voice_menu = ttk.Combobox(row, textvariable=self.voice_var, state="readonly", width=20)
         self.voice_menu.pack(side="left", padx=(6, 6))
         # Every other icon button in the app pairs its glyph with a word (e.g. "⬇ Get",
@@ -370,7 +373,9 @@ class SettingsDrawer(ttk.Frame):
     # -- App tab ---------------------------------------------------------------------
 
     def _build_app_section(self, parent):
-        location = ttk.Labelframe(parent, text="Save Location", padding=10, bootstyle="primary")
+        # "Folder", not "Location", to match every control inside it (Change Save Folder,
+        # New Folder, Reset Save Folder) and the "Saving to:" status label elsewhere.
+        location = ttk.Labelframe(parent, text="Save Folder", padding=10, bootstyle="primary")
         location.pack(fill="x")
         ttk.Button(
             location, text="⚏ Change Save Folder", command=self.explorer.set_download_directory,
