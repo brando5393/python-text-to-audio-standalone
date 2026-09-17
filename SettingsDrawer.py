@@ -187,7 +187,13 @@ class SettingsDrawer(ttk.Frame):
         ttk.Label(row, text="Active voice:").pack(side="left")
         self.voice_menu = ttk.Combobox(row, textvariable=self.voice_var, state="readonly", width=20)
         self.voice_menu.pack(side="left", padx=(6, 6))
-        ttk.Button(row, text="✕", width=3, command=self._delete_voice, bootstyle="danger-outline").pack(side="left")
+        # Every other icon button in the app pairs its glyph with a word (e.g. "⬇ Get",
+        # "▶ Preview This Voice") -- this one used to be a bare "✕" with no accessible
+        # name beyond that glyph, which tells a screen-reader user (or anyone who can't
+        # see it well enough to guess) nothing about what it does.
+        ttk.Button(
+            row, text="✕ Delete", width=10, command=self._delete_voice, bootstyle="danger-outline"
+        ).pack(side="left")
 
         row2 = ttk.Frame(frame)
         row2.pack(fill="x", pady=(8, 0))

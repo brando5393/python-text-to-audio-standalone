@@ -16,12 +16,27 @@ _FILE_TYPES = [
 class FileManager:
     """This class handles all interactions with the user's file system."""
 
+    # Colors for a queued file that has its own engine/voice override, one per theme --
+    # a single hardcoded color can't work in both, since a shade dark enough to read on
+    # the light theme's cream input background is too dark to read on the dark theme's
+    # espresso one, and vice versa. Each was picked by darkening/lightening the theme's
+    # own caramel accent until it cleared WCAG AA's 4.5:1 minimum against the real
+    # ttkbootstrap input background for that theme (measured directly, not guessed --
+    # see test_contrast.py): #8e5f37 is 4.51:1 on the light theme's #f2e8d9 input
+    # background, #b97d4b is 4.56:1 on the dark theme's #2c2118. The literal "blue" this
+    # replaced measured only 1.83:1 on the dark theme's input background -- nowhere near
+    # AA -- because it was never adjusted per theme in the first place.
+    OVERRIDE_COLOR_LIGHT = "#8e5f37"
+    OVERRIDE_COLOR_DARK = "#b97d4b"
+
     def __init__(self, file_list_display, app_log_display, download_directory_label, on_directory_change=None):
         # Each entry is {"path": str, "engine": str|None, "voice": str|None} -- engine/voice
         # None means "use whatever Settings currently says" (the default for every newly
         # added file); a per-file override only exists once explicitly set for that item.
         self.file_list = []
         self.on_directory_change = on_directory_change
+        self._dark_mode = False  # kept in sync via set_dark_mode(); matches the app's own
+        # default starting theme (coffeehouse-light) so colors are right from first launch.
 
         os.makedirs(CONVERSIONS_ROOT, exist_ok=True)
         self.download_directory = CONVERSIONS_ROOT
@@ -75,12 +90,25 @@ class FileManager:
             return f"{filename}  [System voice]"
         return filename
 
-    @staticmethod
-    def _display_color(item):
+    def _display_color(self, item):
         # Distinguishes a file with its own engine/voice override from one that will
         # just use whatever Settings says -- previously every row got the same color
         # regardless, so a customized file looked identical to a default one at a glance.
-        return "#a97142" if item["engine"] else "blue"  # caramel (theme's own "success" accent)
+        # A default file gets "" (the listbox's own themed foreground, already
+        # high-contrast and already kept in sync with theme switches by
+        # main.py's restyle_listbox) rather than a second hardcoded color to track.
+        if not item["engine"]:
+            return ""
+        return self.OVERRIDE_COLOR_DARK if self._dark_mode else self.OVERRIDE_COLOR_LIGHT
+
+    def set_dark_mode(self, dark):
+        """Keeps the override color in sync with the active theme. Called from main.py's
+        set_dark_mode() alongside the rest of the theme switch -- without this, a file's
+        override color would stay whichever theme was active when it was last drawn,
+        which for the light-theme shade against the dark theme's darker input background
+        would fail WCAG AA contrast (see OVERRIDE_COLOR_LIGHT/DARK above)."""
+        self._dark_mode = dark
+        self._refresh_display()
 
     def set_engine_for_item(self, index, engine, voice):
         """Sets an explicit engine/voice override for a single queued file. `engine`

@@ -131,6 +131,7 @@ def set_dark_mode(dark):
     restyle_listbox(file_list_display)
     restyle_listbox(app_log_display)
     apply_background(dark)
+    explorer.set_dark_mode(dark)
 
 
 BASE_NAMED_FONT_SIZES = {"TkDefaultFont": 9, "TkTextFont": 9, "TkHeadingFont": 10, "TkMenuFont": 9}
