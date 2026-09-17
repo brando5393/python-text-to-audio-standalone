@@ -41,12 +41,14 @@ This started as a fork of [TiffinTech](https://github.com/TiffinTech)'s [python-
 ## Installation
 
 ### Option A: Windows installer (recommended for most users)
-Build a standalone `.msi` that bundles its own Python, so no separate install is needed:
+Once a version has been tagged and released, a ready-to-run `.msi` installer is attached to that release on the [Releases page](https://github.com/brando5393/talebrew/releases) -- download it, run it, and it adds both a Desktop and a Start Menu shortcut. No separate Python install needed; the installer bundles its own. Already-installed copies also check for newer releases on startup and offer to update in-app (see [Auto-updates](#auto-updates)).
+
+To build that same installer yourself instead of waiting for a release:
 ```
 poetry install
 poetry run python setup.py bdist_msi
 ```
-The installer lands in `dist\Talebrew-<version>-win-arm64.msi` (or `-win-amd64` on an Intel/AMD machine). Run it to install; it adds a desktop shortcut.
+The installer lands in `dist\Talebrew-<version>-win-arm64.msi` (or `-win-amd64` on an Intel/AMD machine). See [RELEASING.md](RELEASING.md) for the full packaging/release process, including how CI builds and publishes this file automatically on a tagged release.
 
 ### Option B: Run from source
 1. Install Python 3.10+ from [python.org](https://www.python.org/downloads/)
@@ -103,6 +105,7 @@ Porting to macOS/Linux would mean swapping `AudioPlayer.py` for a cross-platform
   poetry run pytest tests/ -v
   ```
   CI (`.github/workflows/tests.yml`) runs the same suite on Windows against Python 3.10 and 3.12 on every push/PR to `main`.
+- Packaging and publishing a release (version bump, tag, what CI builds and attaches) is documented separately in [RELEASING.md](RELEASING.md).
 - Contributions are welcome! Fork this repository, make your changes, and submit a pull request. For any major changes, please open an issue first to discuss the proposed changes. Please add or update tests and this README alongside any behavior change.
 
 ## Architecture

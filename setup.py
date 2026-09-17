@@ -23,6 +23,20 @@ bdist_msi_options = {
     "upgrade_code": "{9C7C6C1E-6B0D-4C7B-9E6F-2B1A9F0D5A11}",
     "add_to_path": False,
     "initial_target_dir": r"[ProgramFiles64Folder]\Talebrew",
+    # The Executable below already gets a Desktop shortcut (shortcut_dir="DesktopFolder");
+    # this adds a second one under the Start Menu, which is where most people actually look
+    # for a newly-installed app. "ProgramMenuFolder" is a predefined Windows Installer
+    # directory id, so it doesn't need a matching row in the Directory table. The
+    # uninstaller itself needs no shortcut of its own -- Windows Installer registers every
+    # MSI in "Apps & features" / "Programs and Features" automatically.
+    "data": {
+        "Shortcut": [
+            (
+                "S_STARTMENU", "ProgramMenuFolder", "Talebrew", "TARGETDIR",
+                "[TARGETDIR]Talebrew.exe", None, None, None, None, None, None, "TARGETDIR",
+            ),
+        ],
+    },
 }
 
 setup(

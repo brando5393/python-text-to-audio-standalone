@@ -1,0 +1,68 @@
+name: Release
+
+# Builds the Windows .msi installer and attaches it to a GitHub Release whenever a
+# version tag is pushed. Nothing here runs automatically outside of a tag push -- see
+# RELEASING.md for the actual release steps (bump version.py, tag, push the tag).
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write # needed to create the Release and upload the .msi asset
+
+jobs:
+  build-and-release:
+    # Windows-only: the app itself is Windows-specific, and cx_Freeze's bdist_msi only
+    # produces an installer for the OS/architecture it's run on (see tests.yml for why
+    # the test job is Windows-only too).
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Install dependencies
+        run: poetry install
+
+      - name: Run tests
+        run: poetry run pytest tests/ -v
+
+      - name: Verify version.py matches the pushed tag
+        shell: bash
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          code_version=$(poetry run python -c "from version import __version__; print(__version__)")
+          if [ "$tag_version" != "$code_version" ]; then
+            echo "::error::Tag v$tag_version does not match version.py's __version__ ($code_version). Update version.py and re-tag."
+            exit 1
+          fi
+
+      - name: Build the .msi installer
+        run: poetry run python setup.py bdist_msi
+
+      - name: Verify the installer built
+        shell: bash
+        run: |
+          msi_count=$(ls dist/*.msi 2>/dev/null | wc -l)
+          if [ "$msi_count" -ne 1 ]; then
+            echo "::error::Expected exactly one .msi in dist/, found $msi_count"
+            exit 1
+          fi
+
+      - name: Create the GitHub Release and upload the installer
+        uses: softprops/action-gh-release@v2
+        with:
+          # GitHub computes and serves a SHA-256 digest for every release asset itself;
+          # AppUpdater.py verifies a downloaded installer against that digest before it's
+          # ever run (see AppUpdater.verify_checksum), so nothing extra needs signing or
+          # checksumming here.
+          files: dist/*.msi
+          generate_release_notes: true
+          draft: false
+          prerelease: false
