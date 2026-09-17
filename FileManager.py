@@ -2,6 +2,7 @@ import os
 from tkinter import filedialog, messagebox, simpledialog
 
 import LogManager as logger
+import PiperEngine
 import TextExtraction
 
 CONVERSIONS_ROOT = os.path.join(os.path.expanduser("~"), "Documents", "TextToAudio", "Conversions")
@@ -16,7 +17,10 @@ class FileManager:
     """This class handles all interactions with the user's file system."""
 
     def __init__(self, file_list_display, app_log_display, download_directory_label, on_directory_change=None):
-        self.file_list = []  # Contains all files selected for conversion
+        # Each entry is {"path": str, "engine": str|None, "voice": str|None} -- engine/voice
+        # None means "use whatever Settings currently says" (the default for every newly
+        # added file); a per-file override only exists once explicitly set for that item.
+        self.file_list = []
         self.on_directory_change = on_directory_change
 
         os.makedirs(CONVERSIONS_ROOT, exist_ok=True)
@@ -39,11 +43,10 @@ class FileManager:
             files_to_convert = filedialog.askopenfilenames(filetypes=_FILE_TYPES)
             if files_to_convert:
                 for file in files_to_convert:
-                    self.file_list.append(file)
-                    filename = os.path.basename(file)
-                    self.file_list_display.insert('end', filename)
+                    self.file_list.append({"path": file, "engine": None, "voice": None})
+                    self.file_list_display.insert("end", self._display_label(self.file_list[-1]))
                     index = self.file_list_display.size() - 1
-                    self.file_list_display.itemconfigure(index, foreground='blue')
+                    self.file_list_display.itemconfigure(index, foreground="blue")
             else:
                 self.logger.add_event("warn", "No files selected for conversion")
         except Exception as e:
@@ -61,6 +64,41 @@ class FileManager:
                 self.logger.add_event("warn", "No file selected for removal")
         except Exception as e:
             self.logger.add_event("error", "Failed to remove file", str(e))
+
+    @staticmethod
+    def _display_label(item):
+        filename = os.path.basename(item["path"])
+        if item["engine"] == "piper":
+            voice_label = PiperEngine.FRIENDLY_NAMES.get(item["voice"], item["voice"] or "default voice")
+            return f"{filename}  [Piper: {voice_label}]"
+        if item["engine"] == "pyttsx3":
+            return f"{filename}  [System voice]"
+        return filename
+
+    def set_engine_for_item(self, index, engine, voice):
+        """Sets an explicit engine/voice override for a single queued file. `engine`
+        of None clears the override, reverting that file back to using Settings."""
+        if not (0 <= index < len(self.file_list)):
+            return
+        self.file_list[index]["engine"] = engine
+        self.file_list[index]["voice"] = voice
+        self._refresh_display()
+
+    def apply_engine_to_all(self, engine, voice):
+        """Applies the same explicit engine/voice override to every queued file at once."""
+        for item in self.file_list:
+            item["engine"] = engine
+            item["voice"] = voice
+        self._refresh_display()
+
+    def _refresh_display(self):
+        selection = self.file_list_display.curselection()
+        self.file_list_display.delete(0, "end")
+        for index, item in enumerate(self.file_list):
+            self.file_list_display.insert("end", self._display_label(item))
+            self.file_list_display.itemconfigure(index, foreground="blue")
+        for index in selection:
+            self.file_list_display.selection_set(index)
 
     def clear_files(self):
         """Clear all files currently selected for conversion."""

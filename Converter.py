@@ -86,38 +86,47 @@ class Converter:
 
     def _convert_worker_inner(self, files, output_dir):
         settings = Config.load()
-        engine_installed = PiperEngine.is_engine_installed()
-        voice_installed = PiperEngine.is_voice_installed(settings["voice"])
-        use_piper = settings["engine"] == "piper" and engine_installed and voice_installed
-
-        if settings["engine"] == "piper" and not use_piper:
-            # Piper was the user's actual choice; falling back to the system voice
-            # without saying why would look like the voice selection is being ignored.
-            if not engine_installed:
-                reason = "the Piper engine isn't installed yet"
-            elif not voice_installed:
-                reason = f"the voice '{settings['voice']}' isn't downloaded yet"
-            else:
-                reason = "Piper isn't fully set up yet"
-            self.logger.add_event(
-                "warn", f"Piper is selected but {reason}, using the system voice instead",
-                "Install the engine and download the voice from Settings > Voice",
-            )
-
-        if not use_piper:
-            self._pyttsx3_speaker = pyttsx3.init()
         os.makedirs(output_dir, exist_ok=True)
 
         # Build the full plan up front (extract + chunk every file) so the progress UI
         # knows the total amount of work, and can therefore show a real ETA, before any
-        # synthesis starts.
+        # synthesis starts. Each item may carry its own engine/voice override (set per
+        # file before conversion starts) -- a plain path string, as used by re-convert
+        # and resuming a past batch, is equivalent to an item with no override, i.e. it
+        # just uses whatever Settings currently says.
         plan = []
-        for file in files:
+        for raw_item in files:
+            if isinstance(raw_item, dict):
+                file, item_engine, item_voice = raw_item["path"], raw_item.get("engine"), raw_item.get("voice")
+            else:
+                file, item_engine, item_voice = raw_item, None, None
+
             if not file.lower().endswith(TextExtraction.SUPPORTED_EXTENSIONS):
                 self.logger.add_event("alert", "The specified file is not supported and could not be converted.", file)
                 self._events.put(("skipped", file, "Unsupported file type"))
                 continue
             try:
+                effective_engine = item_engine or settings["engine"]
+                effective_voice = item_voice or settings["voice"]
+                engine_installed = PiperEngine.is_engine_installed()
+                voice_installed = PiperEngine.is_voice_installed(effective_voice)
+                use_piper = effective_engine == "piper" and engine_installed and voice_installed
+
+                if effective_engine == "piper" and not use_piper:
+                    # Piper was the actual choice for this file; falling back to the
+                    # system voice without saying why would look like it's being ignored.
+                    if not engine_installed:
+                        reason = "the Piper engine isn't installed yet"
+                    elif not voice_installed:
+                        reason = f"the voice '{effective_voice}' isn't downloaded yet"
+                    else:
+                        reason = "Piper isn't fully set up yet"
+                    self.logger.add_event(
+                        "warn",
+                        f"Piper is selected for '{os.path.basename(file)}' but {reason}, using the system voice instead",
+                        "Install the engine and download the voice from Settings > Voice",
+                    )
+
                 text = TextExtraction.extract_text(file)
                 text = TextSanitization.sanitize(text)
                 clean_text = text.strip().replace("\n", " ")
@@ -130,9 +139,12 @@ class Converter:
                     pages, chapters = TextExtraction.extract_structure_counts(file)
                 except Exception:
                     pages, chapters = None, None  # a display-only convenience; never worth failing the conversion over
+                item_settings = {
+                    "voice": effective_voice, "speed": settings["speed"], "expressiveness": settings["expressiveness"],
+                }
                 plan.append({
                     "file": file, "chunks": chunks, "output_file": output_file, "text": clean_text,
-                    "pages": pages, "chapters": chapters,
+                    "pages": pages, "chapters": chapters, "use_piper": use_piper, "settings": item_settings,
                 })
             except Exception as e:
                 error_message = f"Failed to read '{file}': {str(e)}"
@@ -152,7 +164,7 @@ class Converter:
             try:
                 global_done = self._convert_one(
                     item["file"], item["chunks"], item["output_file"], item["text"],
-                    use_piper, settings, global_done, total_chunks, start_time,
+                    item["use_piper"], item["settings"], global_done, total_chunks, start_time,
                     item["pages"], item["chapters"],
                 )
             except Exception as e:

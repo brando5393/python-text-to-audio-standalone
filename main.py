@@ -12,6 +12,7 @@ import Config
 import ConversionQueue
 import Converter
 import FileManager
+import PiperEngine
 import PlaybackMemory
 import SoundEffects
 from AudioPlayer import AudioPlayer, wav_duration_ms
@@ -189,6 +190,47 @@ def do_convert():
         return
     start_conversion(explorer.file_list, explorer.download_directory)
     explorer.clear_files()
+
+
+def on_file_selection_change(_event=None):
+    """Loads the selected file's own engine/voice override into the per-file controls,
+    so switching which file is selected doesn't leave stale values from whichever file
+    was selected before."""
+    per_file_voice_menu.configure(values=PiperEngine.list_installed_voices())
+    selection = file_list_display.curselection()
+    if not selection:
+        return
+    item = explorer.file_list[selection[0]]
+    per_file_engine_var.set(item["engine"] or "default")
+    if item["voice"]:
+        per_file_voice_menu.set(item["voice"])
+    elif per_file_voice_menu["values"]:
+        per_file_voice_menu.set(per_file_voice_menu["values"][0])
+
+
+def _resolve_per_file_choice():
+    engine = per_file_engine_var.get()
+    if engine == "default":
+        return None, None
+    voice = per_file_voice_menu.get() if engine == "piper" else None
+    return engine, voice
+
+
+def apply_engine_to_selected():
+    selection = file_list_display.curselection()
+    if not selection:
+        logger.add_event("warn", "No file selected to set a voice for")
+        return
+    engine, voice = _resolve_per_file_choice()
+    explorer.set_engine_for_item(selection[0], engine, voice)
+
+
+def apply_engine_to_all_files():
+    if not explorer.file_list:
+        logger.add_event("warn", "No files queued to apply a voice to")
+        return
+    engine, voice = _resolve_per_file_choice()
+    explorer.apply_engine_to_all(engine, voice)
 
 
 def poll_conversions():
@@ -383,8 +425,36 @@ file_list_scroll = ttk.Scrollbar(files_frame, orient="vertical", command=file_li
 file_list_display.configure(yscrollcommand=file_list_scroll.set)
 file_list_display.grid(row=0, column=0, sticky="nsew")
 file_list_scroll.grid(row=0, column=1, sticky="ns")
+file_list_display.bind("<<ListboxSelect>>", on_file_selection_change)
 files_frame.rowconfigure(0, weight=1)
 files_frame.columnconfigure(0, weight=1)
+
+# Per-file voice: each queued file can use its own engine/voice, set here before
+# conversion starts, instead of only the one global choice in Settings.
+per_file_frame = ttk.Labelframe(files_frame, text="Selected File's Voice", padding=8, bootstyle="secondary")
+per_file_frame.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+
+per_file_engine_var = tk.StringVar(value="default")
+ttk.Radiobutton(per_file_frame, text="Use Settings default", variable=per_file_engine_var, value="default").pack(
+    anchor="w"
+)
+ttk.Radiobutton(per_file_frame, text="Piper", variable=per_file_engine_var, value="piper").pack(anchor="w")
+ttk.Radiobutton(per_file_frame, text="System voice", variable=per_file_engine_var, value="pyttsx3").pack(anchor="w")
+
+per_file_voice_row = ttk.Frame(per_file_frame)
+per_file_voice_row.pack(fill="x", pady=(4, 0))
+ttk.Label(per_file_voice_row, text="Voice:").pack(side="left")
+per_file_voice_menu = ttk.Combobox(per_file_voice_row, state="readonly", width=16)
+per_file_voice_menu.pack(side="left", padx=(6, 0))
+
+per_file_buttons = ttk.Frame(per_file_frame)
+per_file_buttons.pack(fill="x", pady=(8, 0))
+ttk.Button(
+    per_file_buttons, text="Apply to Selected", command=apply_engine_to_selected, bootstyle="secondary-outline"
+).pack(side="left", fill="x", expand=True, padx=(0, 4))
+ttk.Button(
+    per_file_buttons, text="Apply to All", command=apply_engine_to_all_files, bootstyle="secondary-outline"
+).pack(side="left", fill="x", expand=True, padx=(4, 0))
 
 # Conversions library section
 library_frame = ttk.Labelframe(app, text="Conversions Library", padding=10, bootstyle="primary")

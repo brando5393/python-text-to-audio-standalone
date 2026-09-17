@@ -78,7 +78,7 @@ def test_falls_back_and_warns_when_piper_engine_not_installed(tk_root, tmp_path,
     # It should still complete the conversion (via the fallback), just with a warning
     # explaining why the system voice was used instead of the selected Piper voice.
     assert any(e[0] == "done" for e in events)
-    assert any("Piper is selected but" in m for m in messages), (messages, "expected a fallback warning")
+    assert any("Piper is selected for" in m for m in messages), (messages, "expected a fallback warning")
     assert any("engine isn't installed" in m for m in messages)
 
 
@@ -106,7 +106,7 @@ def test_falls_back_and_warns_when_selected_voice_not_installed(tk_root, tmp_pat
     messages = _run_with_collected_logs(go)
 
     assert any(e[0] == "done" for e in events)
-    assert any("Piper is selected but" in m for m in messages)
+    assert any("Piper is selected for" in m for m in messages)
     assert any("isn't downloaded yet" in m for m in messages)
 
 
@@ -134,7 +134,7 @@ def test_no_warning_when_piper_is_actually_ready(tk_root, tmp_path, monkeypatch)
     messages = _run_with_collected_logs(go)
 
     assert any(e[0] == "done" for e in events)
-    assert not any("Piper is selected but" in m for m in messages)
+    assert not any("Piper is selected for" in m for m in messages)
 
 
 def _write_fake_wav(path):

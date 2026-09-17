@@ -91,3 +91,78 @@ def test_reset_download_directory_restores_default(tk_root, tmp_path, monkeypatc
     manager.download_directory = str(tmp_path / "somewhere-else")
     manager.reset_download_directory()
     assert manager.download_directory == FileManager.CONVERSIONS_ROOT
+
+
+def _add_fake_files(manager, monkeypatch, *paths):
+    monkeypatch.setattr("FileManager.filedialog.askopenfilenames", lambda **k: paths)
+    manager.add_files()
+
+
+def test_added_files_default_to_no_engine_override(tk_root, tmp_path, monkeypatch):
+    manager, _ = _make_manager(tk_root, tmp_path, monkeypatch)
+    _add_fake_files(manager, monkeypatch, r"C:\Books\a.pdf")
+    assert manager.file_list == [{"path": r"C:\Books\a.pdf", "engine": None, "voice": None}]
+    assert manager.file_list_display.get(0) == "a.pdf"
+
+
+def test_set_engine_for_item_updates_only_that_item(tk_root, tmp_path, monkeypatch):
+    manager, _ = _make_manager(tk_root, tmp_path, monkeypatch)
+    _add_fake_files(manager, monkeypatch, r"C:\Books\a.pdf", r"C:\Books\b.pdf")
+
+    manager.set_engine_for_item(0, "piper", "en_US-ryan-high")
+
+    assert manager.file_list[0]["engine"] == "piper"
+    assert manager.file_list[0]["voice"] == "en_US-ryan-high"
+    assert manager.file_list[1]["engine"] is None  # untouched
+
+
+def test_set_engine_for_item_display_shows_the_override(tk_root, tmp_path, monkeypatch):
+    manager, _ = _make_manager(tk_root, tmp_path, monkeypatch)
+    _add_fake_files(manager, monkeypatch, r"C:\Books\a.pdf")
+
+    manager.set_engine_for_item(0, "piper", "en_US-ryan-high")
+    assert "Piper" in manager.file_list_display.get(0)
+    assert "Ryan" in manager.file_list_display.get(0)
+
+    manager.set_engine_for_item(0, "pyttsx3", None)
+    assert "System voice" in manager.file_list_display.get(0)
+
+    manager.set_engine_for_item(0, None, None)
+    assert manager.file_list_display.get(0) == "a.pdf"
+
+
+def test_set_engine_for_item_ignores_out_of_range_index(tk_root, tmp_path, monkeypatch):
+    manager, _ = _make_manager(tk_root, tmp_path, monkeypatch)
+    _add_fake_files(manager, monkeypatch, r"C:\Books\a.pdf")
+    manager.set_engine_for_item(5, "piper", "en_US-ryan-high")  # must not raise
+    assert manager.file_list[0]["engine"] is None
+
+
+def test_apply_engine_to_all_updates_every_item(tk_root, tmp_path, monkeypatch):
+    manager, _ = _make_manager(tk_root, tmp_path, monkeypatch)
+    _add_fake_files(manager, monkeypatch, r"C:\Books\a.pdf", r"C:\Books\b.pdf", r"C:\Books\c.pdf")
+
+    manager.apply_engine_to_all("piper", "en_US-ryan-high")
+
+    assert all(item["engine"] == "piper" and item["voice"] == "en_US-ryan-high" for item in manager.file_list)
+    for i in range(3):
+        assert "Piper: Ryan" in manager.file_list_display.get(i)
+
+
+def test_remove_file_removes_matching_entry_from_file_list(tk_root, tmp_path, monkeypatch):
+    manager, _ = _make_manager(tk_root, tmp_path, monkeypatch)
+    _add_fake_files(manager, monkeypatch, r"C:\Books\a.pdf", r"C:\Books\b.pdf")
+    manager.file_list_display.selection_set(0)
+
+    manager.remove_file()
+
+    assert len(manager.file_list) == 1
+    assert manager.file_list[0]["path"] == r"C:\Books\b.pdf"
+
+
+def test_clear_files_empties_the_list(tk_root, tmp_path, monkeypatch):
+    manager, _ = _make_manager(tk_root, tmp_path, monkeypatch)
+    _add_fake_files(manager, monkeypatch, r"C:\Books\a.pdf")
+    manager.clear_files()
+    assert manager.file_list == []
+    assert manager.file_list_display.size() == 0
