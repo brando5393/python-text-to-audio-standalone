@@ -41,10 +41,25 @@ def isolated_logging(tmp_path, monkeypatch):
     logger.handlers = original_handlers
 
 
-def _pyttsx3_voice_available():
+def _pyttsx3_actually_synthesizes():
+    """Checking pyttsx3.init().getProperty("voices") alone isn't enough -- GitHub's
+    windows-latest runner reports a voice as available but still produces empty/
+    unreadable audio when actually asked to synthesize something, so this runs a real,
+    tiny end-to-end synthesis (matching Converter._synthesize_chunk's own save_to_file
+    + runAndWait pattern) and confirms a real, non-empty WAV comes out the other end."""
+    import tempfile
+    import wave
+
     try:
         import pyttsx3
-        return bool(pyttsx3.init().getProperty("voices"))
+
+        engine = pyttsx3.init()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = f"{tmp_dir}/probe.wav"
+            engine.save_to_file("Test.", path)
+            engine.runAndWait()
+            with wave.open(path, "rb") as wav_file:
+                return wav_file.getnframes() > 0
     except Exception:
         return False
 
@@ -52,12 +67,13 @@ def _pyttsx3_voice_available():
 @pytest.fixture(scope="session")
 def requires_pyttsx3_voice():
     """Skips a test that needs pyttsx3 to actually produce audio, on an environment
-    with no SAPI voice registered at all -- observed on GitHub's windows-latest CI
-    runner, not on a real Windows install (every real target machine for this app
-    ships at least one SAPI voice by default). This is an environment gap, not an
-    application bug: skipping is the correct response, not a false failure."""
-    if not _pyttsx3_voice_available():
-        pytest.skip("No SAPI voice registered in this environment")
+    where it doesn't -- observed on GitHub's windows-latest CI runner (a voice reports
+    as available, but real synthesis still yields no usable audio), not on a real
+    Windows install (verified extensively on an actual machine throughout this
+    project). This is an environment gap, not an application bug: skipping is the
+    correct response here, not a false failure."""
+    if not _pyttsx3_actually_synthesizes():
+        pytest.skip("pyttsx3 does not produce usable audio in this environment")
 
 
 @pytest.fixture(autouse=True)
