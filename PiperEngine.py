@@ -7,7 +7,15 @@ import zipfile
 APP_DATA_DIR = os.path.join(os.path.expanduser("~"), ".texttoaudio")
 ENGINE_DIR = os.path.join(APP_DATA_DIR, "engine", "piper")
 VOICES_DIR = os.path.join(APP_DATA_DIR, "voices")
+SAMPLES_DIR = os.path.join(APP_DATA_DIR, "voice_samples")
 PIPER_EXE = os.path.join(ENGINE_DIR, "piper", "piper.exe")
+
+# Piper's own project publishes a short pre-made sample clip per voice/quality tier, at a
+# path mirroring CURATED_VOICES' own key structure minus the final "<voice_id>" segment
+# (e.g. "en/en_US/ryan/high/en_US-ryan-high" -> ".../en/en_US/ryan/high/speaker_0.mp3").
+# Each clip is small (well under 200KB), so a voice can be previewed without downloading
+# its full 60-120MB model first -- useful for deciding which voice to even bother with.
+SAMPLES_BASE = "https://raw.githubusercontent.com/rhasspy/piper-samples/master/samples"
 
 PIPER_RELEASE_URL = "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip"
 
@@ -110,6 +118,30 @@ def download_voice(voice_key, progress_cb=None):
     _download(f"{HF_BASE}/{voice_key}.onnx", onnx_path, progress_cb)
     _download(f"{HF_BASE}/{voice_key}.onnx.json", json_path, None)
     return voice_id
+
+
+def sample_path_for(voice_key):
+    """Returns the local cache path a voice's preview clip would live at, whether or
+    not it's actually been downloaded yet."""
+    voice_id = os.path.basename(voice_key)
+    return os.path.join(SAMPLES_DIR, voice_id + ".mp3")
+
+
+def is_sample_cached(voice_key):
+    return os.path.isfile(sample_path_for(voice_key))
+
+
+def download_sample(voice_key):
+    """Downloads (and caches) a voice's small pre-made preview clip -- lets someone
+    hear a voice before committing to downloading its full model. Returns the local
+    path, downloading it first only if it isn't already cached."""
+    dest_path = sample_path_for(voice_key)
+    if os.path.isfile(dest_path):
+        return dest_path
+    os.makedirs(SAMPLES_DIR, exist_ok=True)
+    sample_key = voice_key.rsplit("/", 1)[0] + "/speaker_0.mp3"
+    _download(f"{SAMPLES_BASE}/{sample_key}", dest_path, None)
+    return dest_path
 
 
 def _download(url, dest_path, progress_cb):

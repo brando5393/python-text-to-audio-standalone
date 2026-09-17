@@ -23,6 +23,29 @@ def test_wav_duration_ms_returns_zero_for_non_wav_file(tmp_path):
     assert wav_duration_ms(str(path)) == 0
 
 
+def test_two_players_use_independent_mci_aliases(monkeypatch):
+    """Regression: a second AudioPlayer instance (e.g. for previewing a voice in
+    Settings) must not share the main player's MCI alias, or opening a file in one
+    would silently steal control of (and stop) whatever the other had open."""
+    commands = []
+
+    def fake_send(self, command):
+        commands.append(command)
+        return 0, ""
+
+    monkeypatch.setattr(AudioPlayer, "_send", fake_send)
+
+    main_player = AudioPlayer()
+    preview_player = AudioPlayer(alias="texttoaudio_preview")
+    main_player.play(r"C:\main.wav")
+    preview_player.play(r"C:\preview.mp3")
+
+    assert any("alias texttoaudio_player" in c for c in commands)
+    assert any("alias texttoaudio_preview" in c for c in commands)
+    assert main_player.current_path() == r"C:\main.wav"
+    assert preview_player.current_path() == r"C:\preview.mp3"
+
+
 def test_current_path_is_none_before_playing():
     player = AudioPlayer()
     assert player.current_path() is None

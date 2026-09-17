@@ -8,6 +8,35 @@ import ttkbootstrap as ttk
 
 import Config
 import PiperEngine
+from AudioPlayer import AudioPlayer
+
+# Piper's own docs describe noise_scale (0.0-1.0+) as "generator noise" controlling vocal
+# variation, and length_scale as speaking rate; the app maps length_scale to a more
+# intuitive 0.5-2.0 "speed" (inverted: higher speed -> shorter length_scale -> faster
+# speech) with 1.0 as Piper's own natural-rate default. These bands turn the raw number
+# into a plain-language description next to each slider, since "0.83" alone doesn't tell
+# a listener anything about what they'll actually hear change.
+_SPEED_BANDS = [
+    (0.75, "Slower"),
+    (0.9, "Slightly slower"),
+    (1.1, "Normal"),
+    (1.5, "Slightly faster"),
+    (float("inf"), "Faster"),
+]
+_EXPRESSIVENESS_BANDS = [
+    (0.45, "Flat, monotone"),
+    (0.6, "Calm, steady"),
+    (0.75, "Balanced, natural"),
+    (0.9, "Expressive"),
+    (float("inf"), "Highly varied"),
+]
+
+
+def _band_label(value, bands):
+    for threshold, label in bands:
+        if value <= threshold:
+            return label
+    return bands[-1][1]
 
 
 class SettingsDrawer(ttk.Frame):
@@ -25,6 +54,9 @@ class SettingsDrawer(ttk.Frame):
         self.on_text_scale_change = on_text_scale_change
         self.settings = Config.load()
         self._download_events = queue.Queue()
+        self._preview_player = AudioPlayer(alias="texttoaudio_preview")  # own alias -- must
+        # never share one with the main player, or previewing a voice here would stop
+        # whatever the user is actually listening to (and vice versa)
         self._loading = True  # suppresses auto-save while initial values are being set
 
         self.engine_var = tk.StringVar(value=self.settings["engine"])
@@ -167,6 +199,16 @@ class SettingsDrawer(ttk.Frame):
         self.download_btn = ttk.Button(row2, text="⬇ Get", command=self._download_voice, bootstyle="info-outline")
         self.download_btn.pack(side="left")
 
+        self.preview_btn = ttk.Button(
+            frame, text="▶ Preview This Voice", command=self._preview_voice, bootstyle="secondary-outline"
+        )
+        self.preview_btn.pack(fill="x", pady=(6, 0))
+        ttk.Label(
+            frame,
+            text="Hear a short sample of the selected download choice, without downloading its full voice model.",
+            bootstyle="secondary", wraplength=220,
+        ).pack(anchor="w", pady=(2, 0))
+
         self.download_progress = ttk.Progressbar(frame, mode="determinate", maximum=100)
         self.download_progress.pack(fill="x", pady=(8, 0))
 
@@ -218,6 +260,23 @@ class SettingsDrawer(ttk.Frame):
 
         threading.Thread(target=work, daemon=True).start()
 
+    def _preview_voice(self):
+        label = self.download_choice.get()
+        if not label:
+            self.logger.add_event("warn", "Pick a voice from the download list first, to preview it")
+            return
+        voice_key = PiperEngine.CURATED_VOICES[label]
+        self.preview_btn.configure(state="disabled", text="Loading preview...")
+
+        def work():
+            try:
+                sample_path = PiperEngine.download_sample(voice_key)
+                self._download_events.put(("preview_ready", sample_path))
+            except Exception as e:
+                self._download_events.put(("preview_error", str(e)))
+
+        threading.Thread(target=work, daemon=True).start()
+
     def _poll_downloads(self):
         try:
             while True:
@@ -233,6 +292,15 @@ class SettingsDrawer(ttk.Frame):
                 elif kind == "voice_error":
                     self.download_btn.configure(state="normal")
                     self.logger.add_event("error", "Failed to download voice", payload)
+                elif kind == "preview_ready":
+                    self.preview_btn.configure(state="normal", text="▶ Preview This Voice")
+                    try:
+                        self._preview_player.play(payload)
+                    except Exception as e:
+                        self.logger.add_event("error", "Failed to play voice preview", str(e))
+                elif kind == "preview_error":
+                    self.preview_btn.configure(state="normal", text="▶ Preview This Voice")
+                    self.logger.add_event("error", "Failed to load voice preview", payload)
                 elif kind == "engine_done":
                     self._update_engine_status()
                     self.logger.add_event("info", "Piper engine installed")
@@ -250,9 +318,26 @@ class SettingsDrawer(ttk.Frame):
 
         ttk.Label(frame, text="Speed").pack(anchor="w")
         ttk.Scale(frame, variable=self.speed_var, from_=0.5, to=2.0, orient="horizontal").pack(fill="x")
+        self.speed_label_var = tk.StringVar()
+        ttk.Label(frame, textvariable=self.speed_label_var, bootstyle="secondary").pack(anchor="w")
 
         ttk.Label(frame, text="Expressiveness").pack(anchor="w", pady=(8, 0))
         ttk.Scale(frame, variable=self.expr_var, from_=0.3, to=1.0, orient="horizontal").pack(fill="x")
+        self.expr_label_var = tk.StringVar()
+        ttk.Label(frame, textvariable=self.expr_label_var, bootstyle="secondary").pack(anchor="w")
+
+        self.speed_var.trace_add("write", self._update_speed_label)
+        self.expr_var.trace_add("write", self._update_expr_label)
+        self._update_speed_label()
+        self._update_expr_label()
+
+    def _update_speed_label(self, *_args):
+        value = self.speed_var.get()
+        self.speed_label_var.set(f"{value:.2f}x ({_band_label(value, _SPEED_BANDS)})")
+
+    def _update_expr_label(self, *_args):
+        value = self.expr_var.get()
+        self.expr_label_var.set(f"{value:.2f} ({_band_label(value, _EXPRESSIVENESS_BANDS)})")
 
     def _save(self):
         # Merges onto the current settings on disk (rather than constructing a fixed

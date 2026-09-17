@@ -138,6 +138,20 @@ def test_set_engine_for_item_ignores_out_of_range_index(tk_root, tmp_path, monke
     assert manager.file_list[0]["engine"] is None
 
 
+def test_files_with_override_display_a_different_color_than_default(tk_root, tmp_path, monkeypatch):
+    """Regression: every row previously got the same color regardless of whether it had
+    a per-file override, so a customized file was visually indistinguishable from one
+    just using the Settings default."""
+    manager, _ = _make_manager(tk_root, tmp_path, monkeypatch)
+    _add_fake_files(manager, monkeypatch, r"C:\Books\a.pdf", r"C:\Books\b.pdf")
+
+    manager.set_engine_for_item(0, "piper", "en_US-ryan-high")
+
+    default_color = manager.file_list_display.itemcget(1, "foreground")
+    override_color = manager.file_list_display.itemcget(0, "foreground")
+    assert default_color != override_color
+
+
 def test_apply_engine_to_all_updates_every_item(tk_root, tmp_path, monkeypatch):
     manager, _ = _make_manager(tk_root, tmp_path, monkeypatch)
     _add_fake_files(manager, monkeypatch, r"C:\Books\a.pdf", r"C:\Books\b.pdf", r"C:\Books\c.pdf")

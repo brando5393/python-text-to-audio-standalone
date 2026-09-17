@@ -46,7 +46,7 @@ class FileManager:
                     self.file_list.append({"path": file, "engine": None, "voice": None})
                     self.file_list_display.insert("end", self._display_label(self.file_list[-1]))
                     index = self.file_list_display.size() - 1
-                    self.file_list_display.itemconfigure(index, foreground="blue")
+                    self.file_list_display.itemconfigure(index, foreground=self._display_color(self.file_list[-1]))
             else:
                 self.logger.add_event("warn", "No files selected for conversion")
         except Exception as e:
@@ -75,6 +75,13 @@ class FileManager:
             return f"{filename}  [System voice]"
         return filename
 
+    @staticmethod
+    def _display_color(item):
+        # Distinguishes a file with its own engine/voice override from one that will
+        # just use whatever Settings says -- previously every row got the same color
+        # regardless, so a customized file looked identical to a default one at a glance.
+        return "#a97142" if item["engine"] else "blue"  # caramel (theme's own "success" accent)
+
     def set_engine_for_item(self, index, engine, voice):
         """Sets an explicit engine/voice override for a single queued file. `engine`
         of None clears the override, reverting that file back to using Settings."""
@@ -96,7 +103,7 @@ class FileManager:
         self.file_list_display.delete(0, "end")
         for index, item in enumerate(self.file_list):
             self.file_list_display.insert("end", self._display_label(item))
-            self.file_list_display.itemconfigure(index, foreground="blue")
+            self.file_list_display.itemconfigure(index, foreground=self._display_color(item))
         for index in selection:
             self.file_list_display.selection_set(index)
 

@@ -2,7 +2,7 @@ import tkinter as tk
 
 import Config
 import FileManager
-from SettingsDrawer import SettingsDrawer
+from SettingsDrawer import SettingsDrawer, _band_label, _EXPRESSIVENESS_BANDS, _SPEED_BANDS
 
 
 def _make_drawer(tk_root, tmp_path, monkeypatch):
@@ -79,4 +79,61 @@ def test_reset_voice_settings_preserves_unrelated_fields(tk_root, tmp_path, monk
 
     assert Config.load()["engine"] == Config.DEFAULTS["engine"]
     assert Config.load()["start_in_mini_mode"] is True
+    drawer.destroy()
+
+
+def test_band_label_covers_the_full_speed_range():
+    assert _band_label(0.5, _SPEED_BANDS) == "Slower"
+    assert _band_label(0.8, _SPEED_BANDS) == "Slightly slower"
+    assert _band_label(1.0, _SPEED_BANDS) == "Normal"
+    assert _band_label(1.3, _SPEED_BANDS) == "Slightly faster"
+    assert _band_label(2.0, _SPEED_BANDS) == "Faster"
+
+
+def test_band_label_covers_the_full_expressiveness_range():
+    assert _band_label(0.3, _EXPRESSIVENESS_BANDS) == "Flat, monotone"
+    assert _band_label(0.5, _EXPRESSIVENESS_BANDS) == "Calm, steady"
+    assert _band_label(0.667, _EXPRESSIVENESS_BANDS) == "Balanced, natural"
+    assert _band_label(0.85, _EXPRESSIVENESS_BANDS) == "Expressive"
+    assert _band_label(1.0, _EXPRESSIVENESS_BANDS) == "Highly varied"
+
+
+def test_preview_voice_warns_when_nothing_chosen(tk_root, tmp_path, monkeypatch):
+    drawer, _, _ = _make_drawer(tk_root, tmp_path, monkeypatch)
+    logged = []
+    drawer.logger.add_event = lambda status, msg, err="": logged.append((status, msg))
+
+    drawer._preview_voice()
+
+    assert any(status == "warn" for status, _ in logged)
+    drawer.destroy()
+
+
+def test_preview_and_main_players_use_different_mci_aliases(tk_root, tmp_path, monkeypatch):
+    """Regression guard: previewing a voice must never interrupt whatever the user is
+    actually listening to in the main player, and vice versa."""
+    drawer, _, _ = _make_drawer(tk_root, tmp_path, monkeypatch)
+    assert drawer._preview_player._alias != "texttoaudio_player"
+    drawer.destroy()
+
+
+def test_speed_label_reflects_current_slider_value(tk_root, tmp_path, monkeypatch):
+    drawer, _, _ = _make_drawer(tk_root, tmp_path, monkeypatch)
+    drawer.speed_var.set(1.0)
+    assert drawer.speed_label_var.get() == "1.00x (Normal)"
+    drawer.speed_var.set(0.5)
+    assert drawer.speed_label_var.get() == "0.50x (Slower)"
+    drawer.speed_var.set(2.0)
+    assert drawer.speed_label_var.get() == "2.00x (Faster)"
+    drawer.destroy()
+
+
+def test_expressiveness_label_reflects_current_slider_value(tk_root, tmp_path, monkeypatch):
+    drawer, _, _ = _make_drawer(tk_root, tmp_path, monkeypatch)
+    drawer.expr_var.set(0.667)
+    assert drawer.expr_label_var.get() == "0.67 (Balanced, natural)"
+    drawer.expr_var.set(0.3)
+    assert drawer.expr_label_var.get() == "0.30 (Flat, monotone)"
+    drawer.expr_var.set(1.0)
+    assert drawer.expr_label_var.get() == "1.00 (Highly varied)"
     drawer.destroy()

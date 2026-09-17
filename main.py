@@ -1,6 +1,8 @@
 import os
+import queue
 import sys
 import tempfile
+import threading
 import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import messagebox
@@ -9,12 +11,15 @@ import ttkbootstrap as ttk
 
 import AppIcon
 import Config
+import ConversionEstimate
 import ConversionQueue
 import Converter
 import FileManager
 import PiperEngine
 import PlaybackMemory
 import SoundEffects
+import TextExtraction
+import TextSanitization
 from AudioPlayer import AudioPlayer, wav_duration_ms
 from ConversionsLibrary import ConversionsLibrary
 from LogManager import LogManager
@@ -199,6 +204,7 @@ def on_file_selection_change(_event=None):
     per_file_voice_menu.configure(values=PiperEngine.list_installed_voices())
     selection = file_list_display.curselection()
     if not selection:
+        file_info_var.set("")
         return
     item = explorer.file_list[selection[0]]
     per_file_engine_var.set(item["engine"] or "default")
@@ -206,6 +212,8 @@ def on_file_selection_change(_event=None):
         per_file_voice_menu.set(item["voice"])
     elif per_file_voice_menu["values"]:
         per_file_voice_menu.set(per_file_voice_menu["values"][0])
+    request_file_info(item["path"])
+    refresh_file_info_label()
 
 
 def _resolve_per_file_choice():
@@ -223,6 +231,7 @@ def apply_engine_to_selected():
         return
     engine, voice = _resolve_per_file_choice()
     explorer.set_engine_for_item(selection[0], engine, voice)
+    refresh_file_info_label()
 
 
 def apply_engine_to_all_files():
@@ -231,6 +240,72 @@ def apply_engine_to_all_files():
         return
     engine, voice = _resolve_per_file_choice()
     explorer.apply_engine_to_all(engine, voice)
+    refresh_file_info_label()
+
+
+# Pages/chapters/estimated-time info for the selected queued file, shown before
+# conversion starts (the real conversion shows a live, continuously-recalculated ETA
+# instead -- see ProgressDialog -- which is always more accurate than this guess).
+# Extraction runs on a background thread since it can take a moment for a large
+# document, and is cached per path so re-selecting the same file is instant.
+_file_info_cache = {}
+_file_info_queue = queue.Queue()
+
+
+def request_file_info(path):
+    if path in _file_info_cache:
+        return
+
+    def work():
+        try:
+            text = TextSanitization.sanitize(TextExtraction.extract_text(path))
+            pages, chapters = TextExtraction.extract_structure_counts(path)
+            _file_info_queue.put((path, {"pages": pages, "chapters": chapters, "char_count": len(text)}))
+        except Exception:
+            _file_info_queue.put((path, None))
+
+    threading.Thread(target=work, daemon=True).start()
+
+
+def poll_file_info():
+    try:
+        while True:
+            path, info = _file_info_queue.get_nowait()
+            _file_info_cache[path] = info
+            refresh_file_info_label()
+    except queue.Empty:
+        pass
+    app.after(300, poll_file_info)
+
+
+def refresh_file_info_label():
+    selection = file_list_display.curselection()
+    if not selection:
+        file_info_var.set("")
+        return
+    item = explorer.file_list[selection[0]]
+    info = _file_info_cache.get(item["path"])
+    if item["path"] not in _file_info_cache:
+        file_info_var.set("Reading file...")
+        return
+    if info is None:
+        file_info_var.set("Could not read this file")
+        return
+
+    settings = Config.load()
+    effective_engine = item["engine"] or settings["engine"]
+    effective_voice = item["voice"] or settings["voice"]
+
+    structure_parts = []
+    if info["pages"]:
+        structure_parts.append(f"{info['pages']} pages")
+    if info["chapters"]:
+        structure_parts.append(f"{info['chapters']} chapters")
+    structure_text = ", ".join(structure_parts) if structure_parts else "No page/chapter info"
+
+    estimate_seconds = ConversionEstimate.estimate_seconds(info["char_count"], effective_engine, effective_voice)
+    estimate_text = ConversionEstimate.format_duration(estimate_seconds)
+    file_info_var.set(f"{structure_text}\nEst. conversion time: {estimate_text}")
 
 
 def poll_conversions():
@@ -429,10 +504,15 @@ file_list_display.bind("<<ListboxSelect>>", on_file_selection_change)
 files_frame.rowconfigure(0, weight=1)
 files_frame.columnconfigure(0, weight=1)
 
+file_info_var = tk.StringVar(value="")
+ttk.Label(files_frame, textvariable=file_info_var, bootstyle="secondary", justify="left").grid(
+    row=1, column=0, columnspan=2, sticky="w", pady=(8, 0)
+)
+
 # Per-file voice: each queued file can use its own engine/voice, set here before
 # conversion starts, instead of only the one global choice in Settings.
 per_file_frame = ttk.Labelframe(files_frame, text="Selected File's Voice", padding=8, bootstyle="secondary")
-per_file_frame.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+per_file_frame.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(8, 0))
 
 per_file_engine_var = tk.StringVar(value="default")
 ttk.Radiobutton(per_file_frame, text="Use Settings default", variable=per_file_engine_var, value="default").pack(
@@ -576,6 +656,7 @@ SoundEffects.play("ready")
 app.after(300, poll_conversions)
 app.after(2000, update_banner.check_in_background)  # delayed so it never slows down launch
 app.after(5000, track_playback_position)
+app.after(300, poll_file_info)
 
 pending_batch = ConversionQueue.load()
 if pending_batch:
