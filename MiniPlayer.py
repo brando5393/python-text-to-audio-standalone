@@ -7,7 +7,7 @@ import AppIcon
 PROGRESS_POLL_MS = 500
 
 
-def _format_time(ms):
+def format_time(ms):
     total_seconds = int(ms) // 1000
     minutes, seconds = divmod(total_seconds, 60)
     return f"{minutes}:{seconds:02d}"
@@ -94,6 +94,6 @@ class MiniPlayer(ttk.Toplevel):
             length = self.player.length_ms()
             position = self.player.position_ms()
             self.progress_var.set(100 * position / length if length else 0)
-            self.time_var.set(f"{_format_time(position)} / {_format_time(length)}")
+            self.time_var.set(f"{format_time(position)} / {format_time(length)}")
         if self.winfo_exists():
             self.after(PROGRESS_POLL_MS, self._update_progress)

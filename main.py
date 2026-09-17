@@ -24,10 +24,11 @@ from AudioPlayer import AudioPlayer, wav_duration_ms
 import LogManager as LogManagerModule
 from ConversionsLibrary import ConversionsLibrary
 from LogManager import LogManager
-from MiniPlayer import MiniPlayer
+from MiniPlayer import MiniPlayer, format_time
 from ProgressDialog import ProgressDialog
 from SettingsDrawer import SettingsDrawer
 from UpdateBanner import UpdateBanner
+from version import __version__
 
 # A warm "coffee house" theme: espresso brown, caramel, and honey accents, with both a
 # latte-cream light mode and a dark-roast dark mode (toggle from the Settings drawer).
@@ -363,18 +364,18 @@ def play_selected_audio(_event=None):
 
 
 def _resolve_resume_position(path):
-    """Offers to resume from where playback last left off on this file, if it's worth
-    asking about -- not right at the start, and not close enough to the end that it was
-    effectively already finished. Checked via the file's own WAV header rather than
-    opening it for playback first, so nothing plays before the user has decided."""
+    """Automatically resumes from where playback last left off on this file, if it's
+    worth resuming from -- not right at the start, and not close enough to the end that
+    it was effectively already finished. Checked via the file's own WAV header rather
+    than opening it for playback first. No prompt: the "Start Over" button is always
+    right there for the rare case someone wants to hear a file from the beginning again
+    on purpose, so asking "resume?" on every single play would just be a needless click."""
     saved_ms = PlaybackMemory.get_position(path)
     if not PlaybackMemory.is_resumable(saved_ms, wav_duration_ms(path)):
         return 0
     minutes, seconds = divmod(saved_ms // 1000, 60)
-    resume = messagebox.askyesno(
-        "Resume Playback", f"You were {minutes}:{seconds:02d} into this file last time.\n\nResume from there?",
-    )
-    return saved_ms if resume else 0
+    logger.add_event("info", f"Resuming '{os.path.basename(path)}' from {minutes}:{seconds:02d}")
+    return saved_ms
 
 
 def restart_playback():
@@ -453,6 +454,36 @@ def stop_playback():
         PlaybackMemory.save_position(path, player.position_ms())
     player.stop()
     now_playing_var.set("Nothing playing")
+    player_progress_var.set(0)
+    player_time_var.set("0:00 / 0:00")
+
+
+# Elapsed/total time + seek bar for the currently playing file, shown right in the main
+# window's Playback panel (the Mini Player has its own, independent copy of the same
+# idea -- both just poll the same AudioPlayer, so they never fight each other).
+_player_dragging = False
+
+
+def _start_player_drag(_event):
+    global _player_dragging
+    _player_dragging = True
+
+
+def _end_player_drag(_event):
+    global _player_dragging
+    _player_dragging = False
+    length = player.length_ms()
+    if length > 0:
+        player.seek_ms(player_progress_var.get() / 100 * length)
+
+
+def update_player_progress():
+    if not _player_dragging:
+        length = player.length_ms()
+        position = player.position_ms()
+        player_progress_var.set(100 * position / length if length else 0)
+        player_time_var.set(f"{format_time(position)} / {format_time(length)}")
+    app.after(500, update_player_progress)
 
 
 # Must happen before the first window is created (see AppIcon.claim_taskbar_identity).
@@ -497,7 +528,9 @@ header_block = ttk.Frame(app)
 header_block.grid(row=0, column=0, columnspan=3, sticky="w", padx=20, pady=(16, 10))
 title_label = ttk.Label(header_block, text="Talebrew", font=("Palatino Linotype", 21, "bold"))
 title_label.pack(anchor="w")
-ttk.Label(header_block, text="Every story, brewed aloud.", bootstyle="secondary").pack(anchor="w")
+ttk.Label(
+    header_block, text=f"Every story, brewed aloud.  ·  v{__version__}", bootstyle="secondary",
+).pack(anchor="w")
 
 settings_toggle_btn = ttk.Button(app, text="⚙ Settings", command=toggle_settings_drawer, bootstyle="secondary-outline")
 settings_toggle_btn.grid(row=0, column=3, sticky="e", padx=(0, 20), pady=(18, 10))
@@ -580,22 +613,35 @@ now_playing_var = tk.StringVar(value="Nothing playing. Double-click a file in th
 now_playing_label = ttk.Label(player_frame, textvariable=now_playing_var, wraplength=180, bootstyle="secondary")
 now_playing_label.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
 
+player_progress_var = tk.DoubleVar(value=0)
+player_progress_scale = ttk.Scale(
+    player_frame, variable=player_progress_var, from_=0, to=100, orient="horizontal", bootstyle="info",
+)
+player_progress_scale.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 2))
+player_progress_scale.bind("<ButtonPress-1>", _start_player_drag)
+player_progress_scale.bind("<ButtonRelease-1>", _end_player_drag)
+
+player_time_var = tk.StringVar(value="0:00 / 0:00")
+ttk.Label(player_frame, textvariable=player_time_var, bootstyle="secondary").grid(
+    row=2, column=0, columnspan=2, sticky="e", pady=(0, 8)
+)
+
 pause_btn = ttk.Button(
     player_frame, text="▶ Play / Pause", command=toggle_pause, bootstyle="info-outline", width=14
 )
 stop_playback_btn = ttk.Button(
     player_frame, text="■ Stop", command=stop_playback, bootstyle="danger-outline", width=8
 )
-pause_btn.grid(row=1, column=0, sticky="ew", padx=(0, 4))
-stop_playback_btn.grid(row=1, column=1, sticky="ew", padx=(4, 0))
+pause_btn.grid(row=3, column=0, sticky="ew", padx=(0, 4))
+stop_playback_btn.grid(row=3, column=1, sticky="ew", padx=(4, 0))
 restart_btn = ttk.Button(
     player_frame, text="⟲ Start Over", command=restart_playback, bootstyle="secondary-outline"
 )
-restart_btn.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+restart_btn.grid(row=4, column=0, columnspan=2, sticky="ew", pady=(6, 0))
 mini_player_btn = ttk.Button(
     player_frame, text="⤡ Mini Player", command=lambda: enter_mini_mode(), bootstyle="secondary-outline"
 )
-mini_player_btn.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+mini_player_btn.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(6, 0))
 player_frame.columnconfigure(0, weight=1, minsize=130)
 player_frame.columnconfigure(1, weight=1, minsize=90)
 
@@ -700,6 +746,7 @@ app.after(300, poll_conversions)
 app.after(2000, update_banner.check_in_background)  # delayed so it never slows down launch
 app.after(5000, track_playback_position)
 app.after(300, poll_file_info)
+app.after(500, update_player_progress)
 
 pending_batch = ConversionQueue.load()
 if pending_batch:

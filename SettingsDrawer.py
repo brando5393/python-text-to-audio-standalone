@@ -9,6 +9,7 @@ import ttkbootstrap as ttk
 import Config
 import PiperEngine
 from AudioPlayer import AudioPlayer
+from version import __version__
 
 # Piper's own docs describe noise_scale (0.0-1.0+) as "generator noise" controlling vocal
 # variation, and length_scale as speaking rate; the app maps length_scale to a more
@@ -411,6 +412,20 @@ class SettingsDrawer(ttk.Frame):
         # No separate "Reset Appearance" button: appearance only ever has two states
         # (Light/Dark), so clicking "Light" above already is the reset -- a dedicated
         # button for a two-way toggle was pure redundancy.
+
+        about = ttk.Labelframe(parent, text="About", padding=10, bootstyle="secondary")
+        about.pack(fill="x", pady=(10, 0))
+        ttk.Label(about, text=f"Talebrew v{__version__}", bootstyle="secondary").pack(anchor="w")
+        ttk.Label(
+            about,
+            text=(
+                "Licensed under the MIT License.\n"
+                "Bundled Piper voices use a pinned, MIT-licensed Piper release "
+                "under its own license. See the README for the full text and "
+                "third-party notices."
+            ),
+            bootstyle="secondary", justify="left", wraplength=220,
+        ).pack(anchor="w", pady=(4, 0))
 
     def _open_save_folder(self):
         try:

@@ -1,6 +1,6 @@
 import tkinter as tk
 
-from MiniPlayer import MiniPlayer, _format_time
+from MiniPlayer import MiniPlayer, format_time
 
 
 class FakePlayer:
@@ -152,10 +152,10 @@ def test_restart_does_nothing_when_nothing_loaded(tk_root):
 
 
 def test_format_time():
-    assert _format_time(0) == "0:00"
-    assert _format_time(30000) == "0:30"
-    assert _format_time(90000) == "1:30"
-    assert _format_time(3_661_000) == "61:01"
+    assert format_time(0) == "0:00"
+    assert format_time(30000) == "0:30"
+    assert format_time(90000) == "1:30"
+    assert format_time(3_661_000) == "61:01"
 
 
 def test_closing_window_calls_on_expand(tk_root):
