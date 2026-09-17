@@ -50,21 +50,72 @@ _INLINE_PAGE_FRACTION = re.compile(r"(?<!\w)\d{1,4}\s*/\s*\d{1,4}")
 # sentence that happened to start right where a stray page stamp landed.
 _GLUED_TITLE_RUN = re.compile(r"[A-Z][A-Za-z]*(?:\s[A-Z][A-Za-z]*){0,5}")
 
+# A word broken across a PDF line wrap ("exam-\nple") extracts as a trailing hyphen
+# immediately before the newline. Requiring a lowercase letter on both sides is what
+# keeps this from mangling a real hyphenated compound word or name that happens to fall
+# at a line break ("Anne-\nMarie", "Well-\nKnown"): those almost always continue with a
+# capital letter, which this pattern deliberately excludes. A genuine mid-word wrap
+# almost always continues in lowercase, which is what makes the two distinguishable at
+# all without a dictionary.
+_LINE_WRAP_HYPHEN = re.compile(r"([a-z])-\s*\n\s*([a-z])")
+
+# A citation/footnote marker rendered as "[12]" or "[12, 34]" in extracted text. Square
+# brackets containing only digits (and separators between multiple numbers) are
+# essentially never meant to be read aloud as prose -- unlike "[Laughter]" or "[sic]",
+# which contain letters and are deliberately left untouched by requiring digits here.
+_BRACKETED_CITATION = re.compile(r"\s?\[\d{1,3}(?:\s*[,;–-]\s*\d{1,3})*\]")
+
+# Superscript-digit footnote markers ("the effect¹² was profound") are an
+# unambiguous non-prose signal on their own -- real sentences don't contain superscript
+# digits -- so these are stripped before NFKC normalization converts them into ordinary
+# glued digits (see below), at which point they'd be indistinguishable from real numbers.
+_SUPERSCRIPT_DIGITS = re.compile(r"[⁰¹²³⁴-⁹]+")
+
+# A footnote number glued directly onto the end of one sentence and the start of the
+# next with no separating space at all ("...well established.12The next paragraph...").
+# Requiring a lowercase letter immediately before the period rules out decimal numbers
+# ("3.14Something" never matches, since the character before "." is a digit, not a
+# letter), and requiring no space before the following capital keeps this narrow to the
+# exact glued pattern real footnote extraction produces, mirroring the page-stamp case above.
+_GLUED_FOOTNOTE_NUMBER = re.compile(r"(?<=[a-z])\.(\d{1,3})(?=[A-Z])")
+
+# A bullet-point glyph at the start of a line (only genuine bullet characters, never a
+# plain hyphen or em dash, since those are also used for dialogue attribution in novels
+# and would be wrong to strip). TTS engines either skip these silently or mispronounce
+# them, so the glyph itself is dropped while the real list-item text after it is kept.
+_BULLET_MARKER = re.compile(r"^[•‣◦▪▸●○]\s*")
+
 
 def sanitize(text):
     """Cleans extracted document text before it reaches a TTS engine.
 
-    Addresses three problems seen in real extracted text: tables of contents and running
+    Addresses problems seen in real extracted text: tables of contents and running
     headers/footers get read aloud verbatim word for word (a long table of contents can
     turn into many minutes of a voice reading page numbers), broken/garbled Unicode from
-    PDF extraction produces strange or garbled vocal output, and duplicated characters or
-    words from extraction artifacts cause mispronunciations and stutters.
+    PDF extraction produces strange or garbled vocal output, duplicated characters or
+    words from extraction artifacts cause mispronunciations and stutters, words broken
+    across a PDF line wrap get read as two nonsense fragments, footnote/citation markers
+    (bracketed, superscript, or glued onto sentence-ending punctuation) get read aloud as
+    stray numbers, and bullet-point glyphs get skipped or mispronounced instead of just
+    being dropped.
+
+    Generic number/date/currency expansion (e.g. "$5.99" -> "five dollars and ninety nine
+    cents") is deliberately not attempted here: both TTS engines this app supports
+    (espeak-ng behind Piper, and Windows SAPI behind pyttsx3) already do reasonable,
+    locale-aware number normalization of their own, and a second, cruder pass here would
+    only add a new way to get it wrong for uncertain benefit.
     """
+    text = _LINE_WRAP_HYPHEN.sub(r"\1\2", text)
+
     lines = text.split("\n")
+    lines = [_BULLET_MARKER.sub("", line) for line in lines]
     text = "\n".join(_drop_boilerplate_lines(lines))
 
     text = _CHAPTER_LISTING_RUN.sub(" ", text)
     text = _strip_glued_page_stamps(text)
+    text = _BRACKETED_CITATION.sub("", text)
+    text = _SUPERSCRIPT_DIGITS.sub("", text)
+    text = _GLUED_FOOTNOTE_NUMBER.sub(". ", text)
 
     text = ftfy.fix_text(text)  # fixes mojibake/broken encodings from bad extraction
     text = unicodedata.normalize("NFKC", text)  # ligatures (ﬁ -> fi), compatibility forms
