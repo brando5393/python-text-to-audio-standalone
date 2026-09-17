@@ -11,6 +11,9 @@ DEFAULTS = {
     "large_text": False,  # scales up UI text app-wide for readability
     "sound_effects_enabled": True,  # short audio cues for app ready/conversion done/error/exit
     "start_in_mini_mode": False,  # remembers whether the mini player was open at last exit
+    "auto_pause_for_other_audio": False,  # pause playback automatically during calls/notifications
+    # -- opt-in default, matching large_text: a behavior change some users won't want should
+    # never turn itself on for someone who never asked for it.
 }
 
 

@@ -10,6 +10,7 @@ from tkinter import messagebox
 import ttkbootstrap as ttk
 
 import AppIcon
+import AutoPauseMonitor
 import Config
 import ConversionEstimate
 import ConversionQueue
@@ -687,13 +688,21 @@ library = ConversionsLibrary(library_tree, FileManager.CONVERSIONS_ROOT)
 explorer = FileManager.FileManager(file_list_display, app_log_display, download_directory_label, refresh_library)
 converter = Converter.Converter(app_log_display)
 
+# Auto-pause monitor: watches for other apps' audio activity (calls, notifications) and
+# pauses/resumes `player` through its normal public interface -- see AutoPauseMonitor.py
+# for why this is poll-based rather than the OS's ducking-notification callback. Off by
+# default; SettingsDrawer's toggle (Accessibility tab) flips it live via set_enabled().
+auto_pause_monitor = AutoPauseMonitor.AutoPauseMonitor(app, player, logger=logger)
+
 settings_drawer = SettingsDrawer(
     drawer_wrapper, logger, explorer,
     on_theme_change=set_dark_mode, on_text_scale_change=apply_text_scale,
-    on_close=toggle_settings_drawer, dark_mode=False,
+    on_close=toggle_settings_drawer, on_auto_pause_change=auto_pause_monitor.set_enabled,
+    dark_mode=False,
 )
 settings_drawer.pack(fill="both", expand=True)
 apply_text_scale(Config.load()["large_text"])
+auto_pause_monitor.set_enabled(Config.load()["auto_pause_for_other_audio"])
 
 update_banner = UpdateBanner(app, logger, on_before_install_quit=quit_for_update)
 

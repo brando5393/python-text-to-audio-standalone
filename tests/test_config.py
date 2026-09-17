@@ -11,6 +11,7 @@ def test_save_then_load_round_trips(tmp_path, monkeypatch):
     settings = {
         "engine": "piper", "voice": "en_US-ryan-high", "speed": 1.5, "expressiveness": 0.8,
         "large_text": True, "sound_effects_enabled": False, "start_in_mini_mode": True,
+        "auto_pause_for_other_audio": True,
     }
     Config.save(settings)
     assert Config.load() == settings
@@ -41,6 +42,23 @@ def test_load_merges_partial_file_with_defaults(tmp_path, monkeypatch):
     result = Config.load()
     assert result["engine"] == "pyttsx3"
     assert result["voice"] == Config.DEFAULTS["voice"]
+
+
+def test_auto_pause_for_other_audio_defaults_off(tmp_path, monkeypatch):
+    """A behavior change some users won't want (auto-pausing during calls/notifications)
+    must never turn itself on for someone who never opted in -- matching the same
+    cautious-default convention as large_text."""
+    monkeypatch.setattr(Config, "CONFIG_PATH", str(tmp_path / "config.json"))
+    assert Config.load()["auto_pause_for_other_audio"] is False
+    assert Config.DEFAULTS["auto_pause_for_other_audio"] is False
+
+
+def test_auto_pause_for_other_audio_persists_when_enabled(tmp_path, monkeypatch):
+    monkeypatch.setattr(Config, "CONFIG_PATH", str(tmp_path / "config.json"))
+    settings = dict(Config.DEFAULTS)
+    settings["auto_pause_for_other_audio"] = True
+    Config.save(settings)
+    assert Config.load()["auto_pause_for_other_audio"] is True
 
 
 def test_load_ignores_unknown_keys(tmp_path, monkeypatch):
