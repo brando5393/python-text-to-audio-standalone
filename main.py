@@ -22,6 +22,7 @@ import PiperEngine
 import PlaybackControls
 import PlaybackMemory
 import PlaybackQueue
+import ResponsiveLayout
 import SleepTimer
 import SoundEffects
 import TextExtraction
@@ -632,8 +633,12 @@ def update_player_progress():
 # Must happen before the first window is created (see AppIcon.claim_taskbar_identity).
 AppIcon.claim_taskbar_identity()
 
-# Create the main application window
-app = ttk.Window(title="Talebrew — Every story, brewed aloud.", themename=THEME, size=(1340, 900), minsize=(1180, 800))
+# Create the main application window. minsize is intentionally small: the layout below
+# reflows into fewer columns (and, below that, a single scrollable stacked column) as the
+# window narrows -- see apply_layout_tier() -- rather than relying on a large fixed floor
+# to keep content from clipping the way earlier, non-responsive versions of this window
+# needed to.
+app = ttk.Window(title="Talebrew — Every story, brewed aloud.", themename=THEME, size=(1340, 900), minsize=(480, 600))
 # Withdrawn immediately and only shown again once the icon is set (near the end of this
 # file, right before mainloop): Windows' taskbar button caches whatever icon the window
 # had the moment it first became visible, so setting the icon after a frame has already
@@ -644,31 +649,12 @@ AppIcon.apply(app)
 app_dir = AppIcon.APP_DIR
 style = ttk.Style()
 
-# Subtle background texture (faint paper grain + a large, barely-visible watermark of the
-# app's own icon) -- created first so it naturally sits behind every other widget in the
-# stacking order. It only shows through the margins/gaps between panels, since the panels
-# themselves paint their own themed background over it -- by design, not a limitation:
-# that keeps it from ever showing behind text or competing with real content.
-background_photo = None
+# Header -- always visible at the top, outside the scrollable/reflowing area below.
+app.columnconfigure(0, weight=1)
+app.rowconfigure(1, weight=1)
 
-
-def apply_background(dark):
-    global background_photo
-    filename = "background-dark.png" if dark else "background-light.png"
-    try:
-        background_photo = tk.PhotoImage(file=os.path.join(app_dir, "assets", filename))
-        background_label.configure(image=background_photo, background=style.colors.bg)
-    except (tk.TclError, NameError):
-        pass  # Missing/unloadable texture is cosmetic only -- never block the app.
-
-
-background_label = tk.Label(app, borderwidth=0, highlightthickness=0)
-background_label.place(x=0, y=0, relwidth=1, relheight=1)
-apply_background(dark=False)
-
-# Header
 header_block = ttk.Frame(app)
-header_block.grid(row=0, column=0, columnspan=3, sticky="w", padx=20, pady=(16, 10))
+header_block.grid(row=0, column=0, sticky="w", padx=20, pady=(16, 10))
 title_label = ttk.Label(header_block, text="Talebrew", font=("Palatino Linotype", 21, "bold"))
 title_label.pack(anchor="w")
 ttk.Label(
@@ -676,11 +662,107 @@ ttk.Label(
 ).pack(anchor="w")
 
 settings_toggle_btn = ttk.Button(app, text="⚙ Settings", command=toggle_settings_drawer, bootstyle="secondary-outline")
-settings_toggle_btn.grid(row=0, column=3, sticky="e", padx=(0, 20), pady=(18, 10))
+settings_toggle_btn.grid(row=0, column=0, sticky="e", padx=(0, 20), pady=(18, 10))
+
+# Everything below the header lives inside a scrollable canvas, not gridded straight onto
+# `app`. Two things this buys, neither of which a plain fixed grid can do on its own:
+#   1. apply_layout_tier() (below) re-grids the section frames between a wide 3-4 column
+#      arrangement, a medium 2-column one, and a fully stacked single column, based on the
+#      window's actual current width -- real reflow, not just proportional resizing of a
+#      fixed grid, the way CSS flexbox/grid breakpoints work.
+#   2. When stacked content is taller than the window (small window, "Larger text" on,
+#      many queued files, etc.), the canvas scrolls vertically instead of silently
+#      clipping content with no way to reach it.
+scroll_canvas = tk.Canvas(app, borderwidth=0, highlightthickness=0)
+scroll_vscrollbar = ttk.Scrollbar(app, orient="vertical", command=scroll_canvas.yview, bootstyle="round")
+scroll_hscrollbar = ttk.Scrollbar(app, orient="horizontal", command=scroll_canvas.xview, bootstyle="round")
+scroll_canvas.configure(yscrollcommand=scroll_vscrollbar.set, xscrollcommand=scroll_hscrollbar.set)
+scroll_canvas.grid(row=1, column=0, sticky="nsew", padx=(20, 0), pady=(0, 0))
+scroll_vscrollbar.grid(row=1, column=1, sticky="ns", padx=(0, 4))
+scroll_hscrollbar.grid(row=2, column=0, sticky="ew", padx=(20, 0), pady=(2, 0))
+app.columnconfigure(1, weight=0)
+
+content_frame = ttk.Frame(scroll_canvas, padding=(0, 8, 20, 16))
+content_window = scroll_canvas.create_window((0, 0), window=content_frame, anchor="nw")
+
+
+def _sync_canvas_geometry():
+    """Keeps the canvas's embedded content_frame sized correctly in both directions:
+    at least as wide as the canvas (so narrow/stacked content still fills the window
+    rather than leaving a dead gap on the right), but never *narrower* than its own
+    actual required width (so a wide-tier layout that's genuinely too wide for the
+    current window -- e.g. the Settings drawer open right at the edge of the WIDE
+    breakpoint -- becomes horizontally scrollable instead of silently clipped)."""
+    content_frame.update_idletasks()
+    required_width = content_frame.winfo_reqwidth()
+    canvas_width = scroll_canvas.winfo_width()
+    target_width = max(canvas_width, required_width)
+    scroll_canvas.itemconfig(content_window, width=target_width)
+    scroll_canvas.configure(scrollregion=scroll_canvas.bbox("all"))
+    if required_width > canvas_width:
+        scroll_hscrollbar.grid()
+    else:
+        scroll_hscrollbar.grid_remove()
+
+
+def _on_content_configure(_event=None):
+    _sync_canvas_geometry()
+
+
+def _on_canvas_configure(event):
+    apply_layout_tier(ResponsiveLayout.tier_for_width(event.width))
+    _sync_canvas_geometry()
+
+
+content_frame.bind("<Configure>", _on_content_configure)
+scroll_canvas.bind("<Configure>", _on_canvas_configure)
+
+
+def _on_mousewheel(event):
+    scroll_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+
+def _bind_mousewheel(_event=None):
+    scroll_canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
+
+def _unbind_mousewheel(_event=None):
+    scroll_canvas.unbind_all("<MouseWheel>")
+
+
+# Scroll-wheel support is only active while the pointer is actually over the scrollable
+# area, so it doesn't hijack scrolling inside other widgets (the Settings drawer's own
+# notebook, comboboxes, etc.) that happen to sit on top of it.
+scroll_canvas.bind("<Enter>", _bind_mousewheel)
+scroll_canvas.bind("<Leave>", _unbind_mousewheel)
+
+# Subtle background texture (faint paper grain + a large, barely-visible watermark of the
+# app's own icon) -- lives inside the scrollable content frame and is lowered behind
+# every other widget, so it still only shows through the margins/gaps between panels
+# rather than behind text or competing with real content.
+background_photo = None
+
+
+def apply_background(dark):
+    global background_photo
+    filename = "background-dark.png" if dark else "background-light.png"
+    scroll_canvas.configure(bg=style.colors.bg)  # keeps any canvas area beyond the
+    # content frame's own size (e.g. a short WIDE-tier layout in a tall window) matching
+    # the theme instead of showing Tk's plain default canvas background.
+    try:
+        background_photo = tk.PhotoImage(file=os.path.join(app_dir, "assets", filename))
+        background_label.configure(image=background_photo, background=style.colors.bg)
+    except (tk.TclError, NameError):
+        pass  # Missing/unloadable texture is cosmetic only -- never block the app.
+
+
+background_label = tk.Label(content_frame, borderwidth=0, highlightthickness=0)
+background_label.place(x=0, y=0, relwidth=1, relheight=1)
+background_label.lower()
+apply_background(dark=False)
 
 # Files section
-files_frame = ttk.Labelframe(app, text="Files to Convert", padding=10, bootstyle="primary")
-files_frame.grid(row=1, column=0, sticky="nsew", padx=(20, 8), pady=8)
+files_frame = ttk.Labelframe(content_frame, text="Files to Convert", padding=10, bootstyle="primary")
 
 file_list_display = styled_listbox(files_frame, height=14, width=32)
 file_list_scroll = ttk.Scrollbar(files_frame, orient="vertical", command=file_list_display.yview, bootstyle="round")
@@ -724,8 +806,7 @@ ttk.Button(
 ).pack(side="left", fill="x", expand=True, padx=(4, 0))
 
 # Conversions library section
-library_frame = ttk.Labelframe(app, text="Conversions Library", padding=10, bootstyle="primary")
-library_frame.grid(row=1, column=1, sticky="nsew", padx=8, pady=8)
+library_frame = ttk.Labelframe(content_frame, text="Conversions Library", padding=10, bootstyle="primary")
 
 library_tree = ttk.Treeview(library_frame, height=14, bootstyle="primary")
 library_scroll = ttk.Scrollbar(library_frame, orient="vertical", command=library_tree.yview, bootstyle="round")
@@ -744,16 +825,22 @@ reconvert_btn = ttk.Button(
 )
 reconvert_btn.grid(row=2, column=0, sticky="ew", pady=(6, 0))
 
+# Actions + Playback: gridded and reflowed together as a single unit (see
+# apply_layout_tier's actions_column) so they always stack tightly one under the other,
+# rather than sitting in separate weighted grid rows that can leave a dead gap between
+# them once one of those rows is told to stretch and fill leftover vertical space.
+actions_column = ttk.Frame(content_frame)
+
 # Actions section
-controls_frame = ttk.Labelframe(app, text="Actions", padding=10, bootstyle="primary")
-controls_frame.grid(row=1, column=2, sticky="new", padx=8, pady=8)
+controls_frame = ttk.Labelframe(actions_column, text="Actions", padding=10, bootstyle="primary")
+controls_frame.pack(fill="x")
 
 # Player section
-player_frame = ttk.Labelframe(app, text="Playback", padding=10, bootstyle="secondary")
-player_frame.grid(row=2, column=2, sticky="new", padx=8, pady=(0, 8))
+player_frame = ttk.Labelframe(actions_column, text="Playback", padding=10, bootstyle="secondary")
+player_frame.pack(fill="x", pady=(8, 0))
 
 now_playing_var = tk.StringVar(value="Nothing playing. Double-click a file in the Conversions Library.")
-now_playing_label = ttk.Label(player_frame, textvariable=now_playing_var, wraplength=180, bootstyle="secondary")
+now_playing_label = ttk.Label(player_frame, textvariable=now_playing_var, wraplength=220, bootstyle="secondary")
 now_playing_label.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
 
 player_progress_var = tk.DoubleVar(value=0)
@@ -800,12 +887,23 @@ auto_play_var = tk.BooleanVar(value=True)
 auto_play_check = ttk.Checkbutton(
     player_frame, text="Auto-play next", variable=auto_play_var, bootstyle="round-toggle",
 )
-auto_play_check.grid(row=7, column=0, columnspan=2, sticky="w", pady=(6, 0))
+# Speed/Tone: live playback controls (not synthesis settings -- see PlaybackControls.py),
+# applied immediately to whatever's currently playing or paused, no re-conversion needed.
+# Its own row (7) -- this previously shared row 6 with the Prev/Next buttons above, which
+# silently overlapped both widgets in the same grid cell instead of stacking them.
+playback_controls = PlaybackControls.build(player_frame, player)
+playback_controls.grid(row=7, column=0, columnspan=2, sticky="ew", pady=(10, 0))
+
+auto_play_var = tk.BooleanVar(value=True)
+auto_play_check = ttk.Checkbutton(
+    player_frame, text="Auto-play next", variable=auto_play_var, bootstyle="round-toggle",
+)
+auto_play_check.grid(row=8, column=0, columnspan=2, sticky="w", pady=(6, 0))
 
 bookmarks_btn = ttk.Button(
     player_frame, text="🔖 Bookmarks", command=open_bookmarks_dialog, bootstyle="secondary-outline"
 )
-bookmarks_btn.grid(row=8, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+bookmarks_btn.grid(row=9, column=0, columnspan=2, sticky="ew", pady=(6, 0))
 
 # Sleep timer: pauses (never stops) playback after the chosen duration -- see
 # tick_sleep_timer()/SleepTimer.py above. Relabels itself with the remaining time
@@ -815,25 +913,22 @@ sleep_timer_menu = ttk.Combobox(
     player_frame, textvariable=sleep_timer_choice_var, state="readonly", values=SleepTimer.CHOICES,
 )
 sleep_timer_menu.bind("<<ComboboxSelected>>", on_sleep_timer_choice)
-sleep_timer_menu.grid(row=9, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+sleep_timer_menu.grid(row=10, column=0, columnspan=2, sticky="ew", pady=(6, 0))
 
 player_frame.columnconfigure(0, weight=1, minsize=130)
 player_frame.columnconfigure(1, weight=1, minsize=90)
 
-# Speed/Tone: live playback controls (not synthesis settings -- see PlaybackControls.py),
-# applied immediately to whatever's currently playing or paused, no re-conversion needed.
-playback_controls = PlaybackControls.build(player_frame, player)
-playback_controls.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(10, 0))
-
-# Settings drawer (docked, hidden until toggled)
-drawer_wrapper = ttk.Frame(app, width=260)
-drawer_wrapper.grid(row=1, column=3, rowspan=2, sticky="nsew", padx=(0, 20), pady=8)
-drawer_wrapper.grid_propagate(False)
+# Settings drawer (docked, hidden until toggled). No fixed width/grid_propagate(False)
+# here -- a hard pixel width previously risked clipping its own contents sideways if
+# "Larger text" made them wider than that fixed box (the same class of bug found and
+# fixed for the Mini Player). Instead its column gets a comfortable *minimum* width per
+# layout tier (see apply_layout_tier()), and the drawer is free to size wider than that
+# if its content actually needs more room.
+drawer_wrapper = ttk.Frame(content_frame)
 drawer_wrapper.grid_remove()
 
 # Log section
-log_frame = ttk.Labelframe(app, text="Activity Log", padding=10, bootstyle="secondary")
-log_frame.grid(row=3, column=0, columnspan=4, sticky="nsew", padx=20, pady=(8, 8))
+log_frame = ttk.Labelframe(content_frame, text="Activity Log", padding=10, bootstyle="secondary")
 
 app_log_display = styled_listbox(log_frame, height=8, font=("Consolas", 9))
 log_scroll = ttk.Scrollbar(log_frame, orient="vertical", command=app_log_display.yview, bootstyle="round")
@@ -844,8 +939,7 @@ log_frame.rowconfigure(0, weight=1)
 log_frame.columnconfigure(0, weight=1)
 
 # Directory + exit bar
-bottom_bar = ttk.Frame(app, padding=(20, 0, 20, 16))
-bottom_bar.grid(row=4, column=0, columnspan=4, sticky="ew")
+bottom_bar = ttk.Frame(content_frame, padding=(0, 0, 0, 0))
 bottom_bar.columnconfigure(0, weight=1)
 
 download_directory_label = ttk.Label(bottom_bar, bootstyle="secondary")
@@ -854,12 +948,92 @@ download_directory_label.grid(row=0, column=0, sticky="w")
 exit_btn = ttk.Button(bottom_bar, text="Exit", command=confirm_quit, bootstyle="danger-outline")
 exit_btn.grid(row=0, column=1)
 
-app.columnconfigure(0, weight=2)
-app.columnconfigure(1, weight=2)
-app.columnconfigure(2, weight=1, minsize=260)
-app.columnconfigure(3, weight=0)
-app.rowconfigure(1, weight=1)
-app.rowconfigure(3, weight=1)
+
+# Responsive reflow: re-grids the primary section frames into one of three tiers
+# (ResponsiveLayout.WIDE/MEDIUM/NARROW) based on the scroll area's current width. This is
+# the Tkinter equivalent of a CSS breakpoint -- Tk's grid geometry manager has no native
+# concept of "stack these below a width threshold" the way flexbox/grid does, so it's done
+# by hand here: forget every managed frame's grid placement, reset the grid's row/column
+# configuration, then re-grid them for the new tier. Skipped entirely when the tier hasn't
+# actually changed, so ordinary proportional resizing within a tier stays cheap.
+_MANAGED_FRAMES = (files_frame, library_frame, actions_column, drawer_wrapper, log_frame, bottom_bar)
+_current_layout_tier = None
+
+
+def apply_layout_tier(tier):
+    global _current_layout_tier
+    if tier == _current_layout_tier:
+        return
+    _current_layout_tier = tier
+
+    drawer_was_visible = drawer_wrapper.winfo_ismapped()
+    for frame in _MANAGED_FRAMES:
+        frame.grid_forget()
+    for col in range(4):
+        content_frame.grid_columnconfigure(col, weight=0, minsize=0)
+    for row in range(6):
+        content_frame.grid_rowconfigure(row, weight=0, minsize=0)
+
+    # A column's minsize is a *floor*, not a cap -- grid will always happily widen a
+    # column past it to fit its widest child, but never below it. Deriving these floors
+    # from each frame's own actual required width (rather than a hand-picked pixel guess)
+    # is what keeps their real contents -- button labels, "Larger text" scaling, etc. --
+    # from ever being squeezed narrower than they need and visually clipped, the same
+    # failure mode found and fixed for the Mini Player earlier this session.
+    content_frame.update_idletasks()
+    actions_min = max(240, actions_column.winfo_reqwidth())
+    drawer_min = max(260, drawer_wrapper.winfo_reqwidth())
+
+    if tier == ResponsiveLayout.WIDE:
+        # The original side-by-side arrangement: Files | Library | Actions-over-Playback,
+        # with the Settings drawer docked as a slim 4th column.
+        files_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 8), pady=8)
+        library_frame.grid(row=0, column=1, sticky="nsew", padx=8, pady=8)
+        actions_column.grid(row=0, column=2, sticky="new", padx=8, pady=8)
+        drawer_wrapper.grid(row=0, column=3, sticky="nsew", padx=(8, 0), pady=8)
+        log_frame.grid(row=1, column=0, columnspan=4, sticky="nsew", pady=(0, 8))
+        bottom_bar.grid(row=2, column=0, columnspan=4, sticky="ew")
+        content_frame.grid_columnconfigure(0, weight=2, minsize=340)
+        content_frame.grid_columnconfigure(1, weight=2, minsize=260)
+        content_frame.grid_columnconfigure(2, weight=1, minsize=actions_min)
+        content_frame.grid_columnconfigure(3, weight=0, minsize=drawer_min)
+        content_frame.grid_rowconfigure(0, weight=1)
+        content_frame.grid_rowconfigure(1, weight=1)
+    elif tier == ResponsiveLayout.MEDIUM:
+        # Two columns: Files/Library share a row, Actions+Playback stacks full-width
+        # below them, and the Settings drawer (when open) and the log stack below that --
+        # there's no longer room for a 4th docked column at this width.
+        files_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 8), pady=8)
+        library_frame.grid(row=0, column=1, sticky="nsew", padx=(8, 0), pady=8)
+        actions_column.grid(row=1, column=0, columnspan=2, sticky="new", pady=(0, 8))
+        drawer_wrapper.grid(row=2, column=0, columnspan=2, sticky="nsew", pady=(0, 8))
+        log_frame.grid(row=3, column=0, columnspan=2, sticky="nsew", pady=(0, 8))
+        bottom_bar.grid(row=4, column=0, columnspan=2, sticky="ew")
+        content_frame.grid_columnconfigure(0, weight=1, minsize=300)
+        content_frame.grid_columnconfigure(1, weight=1, minsize=300)
+        content_frame.grid_rowconfigure(0, weight=1)
+        content_frame.grid_rowconfigure(3, weight=1)
+    else:
+        # NARROW: one fully stacked column, full width, in reading order. Nothing here
+        # is forced smaller than its own natural size -- the scroll_canvas above simply
+        # grows taller than the window and scrolls, rather than clipping anything.
+        for index, frame in enumerate(_MANAGED_FRAMES):
+            frame.grid(row=index, column=0, sticky="ew", pady=(0, 8))
+        content_frame.grid_columnconfigure(0, weight=1, minsize=260)
+        # Files/Library get a comfortable minimum height (rather than weight=1, which
+        # would stretch them to fill the whole remaining scroll area) since they're two
+        # of six stacked sections here, not the only two things on screen.
+        content_frame.grid_rowconfigure(0, minsize=220)
+        content_frame.grid_rowconfigure(1, minsize=220)
+
+    if not drawer_was_visible:
+        drawer_wrapper.grid_remove()
+
+
+# Applied immediately so every managed frame is actually placed on screen even before the
+# canvas's own first <Configure> event fires with the real width -- that event (bound
+# above) then keeps it in sync as the window is resized.
+apply_layout_tier(ResponsiveLayout.tier_for_width(1340))
 
 # Wire up the app's logic
 logger = LogManager(app_log_display)
