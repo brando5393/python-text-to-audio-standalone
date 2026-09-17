@@ -1,13 +1,16 @@
 """Regenerates the app's decorative background images (assets/background-light.png,
 assets/background-dark.png) and the website's background textures (docs/assets/
-wood-*.webp) with a subtle wood-grain look -- built entirely from colors already in the
+wood-*.webp) with the same wood-grain look -- built entirely from colors already in the
 app's own palette (main.py's ttk.Theme() call), no new hues introduced.
 
-The app's two background images aren't flat: each already carries a faint logo
-watermark in the bottom-right, baked in as a per-pixel tint over the flat base color.
-This script extracts that tint as a delta (original_pixel - base_color) and reapplies
-it unchanged on top of the new wood-grain texture, so the watermark's position and
-shape are untouched -- only the texture underneath it changes.
+The app's background is generated at a canvas far larger than any realistic window
+(2560x1600), *not* the size of any particular window. main.py's background Label
+displays it unscaled and un-stretched -- Tk clips an oversized image to whatever
+smaller area the Label actually occupies rather than distorting it, which is exactly
+the "always fills the visible area, never stretched, never tiled" behavior a CSS
+`background-size: cover` would give, achieved for free without adding a runtime image-
+resizing dependency (Pillow is a dev-only dependency here; ImageTk-based dynamic resize
+at runtime would need to move it into the app's actual shipped dependencies).
 
 Run manually when the theme palette changes:
     poetry run python scripts/generate_wood_backgrounds.py
@@ -48,11 +51,11 @@ def _wood_grain(size, base, grain_color, seed, knots=True):
     Blended between `base` and `grain_color`, both already palette colors, so this only
     ever mixes tones that already exist in the app, never introduces a new one.
 
-    `knots=False` skips the swirl entirely, for contexts where the texture is only ever
-    seen through thin, irregular gaps (the app's background peeks out around panels,
-    not as one open canvas) -- a dramatic off-center knot reads as a fragmented,
-    random-looking sliver there, while calm flowing grain reads fine in any shape of
-    gap. The website, which has a real open canvas to show it on, keeps the knot."""
+    `knots=False` skips the swirl entirely, leaving calm flowing grain -- unused by
+    either the app or the website today, but kept as an option for any future context
+    that only ever shows the texture through thin, irregular gaps rather than one open
+    canvas, where a dramatic off-center knot would read as a fragmented, random-looking
+    sliver instead of a coherent surface."""
     width, height = size
     rng = np.random.default_rng(seed)
     y = np.arange(height).reshape(-1, 1).astype(np.float64)
@@ -100,26 +103,39 @@ def _wood_grain(size, base, grain_color, seed, knots=True):
     grain = np.clip(0.82 * rings + 0.18 * noise, 0, 1)
 
     # Blend base -> grain_color using `grain` as the mix factor, kept subtle so it
-    # reads as texture, not a color change. The app's calm (knots=False) variant is a
-    # touch stronger than the site's, since it's only ever seen through narrow gaps --
-    # at the same low strength as the site's large open canvas it would be nearly
-    # invisible in that much less screen real estate.
-    strength = 0.24 if knots else 0.32
+    # reads as texture, not a color change.
+    strength = 0.24
     out = np.empty((height, width, 3), dtype=np.float64)
     for c in range(3):
         out[:, :, c] = base[c] + (grain_color[c] - base[c]) * grain * strength
     return out
 
 
-def _apply_to_existing(filename, base_color, grain_color, seed):
-    path = os.path.join(ASSETS_DIR, filename)
-    original = np.asarray(Image.open(path).convert("RGB"), dtype=np.float64)
-    base_arr = np.array(base_color, dtype=np.float64)
-    delta = original - base_arr  # captures the existing watermark logo tint
+APP_CANVAS_SIZE = (2560, 1600)
+# The logo watermark sits at a fixed offset from the canvas's own center -- since Tk
+# always shows a centered crop of this oversized image regardless of the actual window
+# size, "offset from center" is the only positioning that stays roughly consistent
+# (bottom-right-ish of whatever's visible) across different window sizes, unlike an
+# offset from the canvas's actual corner, which would only ever be visible if the
+# window were maximized to the canvas's own full size.
+_WATERMARK_CENTER_OFFSET = (560, 330)
 
-    wood = _wood_grain((original.shape[1], original.shape[0]), base_color, grain_color, seed, knots=False)
-    result = np.clip(wood + delta, 0, 255).astype(np.uint8)
-    Image.fromarray(result, "RGB").save(path, optimize=True)
+
+def _make_app_background(filename, base_color, grain_color, seed):
+    wood = np.clip(_wood_grain(APP_CANVAS_SIZE, base_color, grain_color, seed, knots=True), 0, 255).astype(np.uint8)
+    img = Image.fromarray(wood, "RGB").convert("RGBA")
+
+    logo = Image.open(os.path.join(ASSETS_DIR, "logo.png")).convert("RGBA")
+    logo_size = 260
+    logo = logo.resize((logo_size, logo_size), Image.LANCZOS)
+    r, g, b, a = logo.split()
+    logo.putalpha(a.point(lambda v: int(v * 0.16)))  # faint watermark, not a real logo
+
+    cx, cy = APP_CANVAS_SIZE[0] // 2, APP_CANVAS_SIZE[1] // 2
+    ox, oy = _WATERMARK_CENTER_OFFSET
+    pos = (cx + ox - logo_size // 2, cy + oy - logo_size // 2)
+    img.alpha_composite(logo, dest=pos)
+    img.convert("RGB").save(os.path.join(ASSETS_DIR, filename), optimize=True)
 
 
 def _make_site_background(filename, base_color, grain_color, seed, size=(1920, 1200)):
@@ -132,8 +148,8 @@ def _make_site_background(filename, base_color, grain_color, seed, size=(1920, 1
 
 
 if __name__ == "__main__":
-    _apply_to_existing("background-light.png", CREAM, CARAMEL, seed=1)
-    _apply_to_existing("background-dark.png", DARK_ROAST, ESPRESSO, seed=2)
+    _make_app_background("background-light.png", CREAM, CARAMEL, seed=1)
+    _make_app_background("background-dark.png", DARK_ROAST, ESPRESSO, seed=2)
     # Filenames carry a version suffix, bumped by hand whenever this script changes --
     # browsers cache images aggressively, and a same-named file update can sit stale in
     # a visitor's cache indefinitely (confirmed happening in practice: the live server
