@@ -455,7 +455,7 @@ def stop_playback():
 AppIcon.claim_taskbar_identity()
 
 # Create the main application window
-app = ttk.Window(title="Talebrew — Every story, brewed aloud.", themename=THEME, size=(1040, 680), minsize=(900, 620))
+app = ttk.Window(title="Talebrew — Every story, brewed aloud.", themename=THEME, size=(1340, 900), minsize=(1180, 800))
 # Withdrawn immediately and only shown again once the icon is set (near the end of this
 # file, right before mainloop): Windows' taskbar button caches whatever icon the window
 # had the moment it first became visible, so setting the icon after a frame has already
@@ -502,14 +502,14 @@ settings_toggle_btn.grid(row=0, column=3, sticky="e", padx=(0, 20), pady=(18, 10
 files_frame = ttk.Labelframe(app, text="Files to Convert", padding=10, bootstyle="primary")
 files_frame.grid(row=1, column=0, sticky="nsew", padx=(20, 8), pady=8)
 
-file_list_display = styled_listbox(files_frame, height=14)
+file_list_display = styled_listbox(files_frame, height=14, width=32)
 file_list_scroll = ttk.Scrollbar(files_frame, orient="vertical", command=file_list_display.yview, bootstyle="round")
 file_list_display.configure(yscrollcommand=file_list_scroll.set)
 file_list_display.grid(row=0, column=0, sticky="nsew")
 file_list_scroll.grid(row=0, column=1, sticky="ns")
 file_list_display.bind("<<ListboxSelect>>", on_file_selection_change)
 files_frame.rowconfigure(0, weight=1)
-files_frame.columnconfigure(0, weight=1)
+files_frame.columnconfigure(0, weight=1, minsize=340)
 
 file_info_var = tk.StringVar(value="")
 ttk.Label(files_frame, textvariable=file_info_var, bootstyle="secondary", justify="left").grid(
@@ -576,8 +576,12 @@ now_playing_var = tk.StringVar(value="Nothing playing. Double-click a file in th
 now_playing_label = ttk.Label(player_frame, textvariable=now_playing_var, wraplength=180, bootstyle="secondary")
 now_playing_label.grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
 
-pause_btn = ttk.Button(player_frame, text="▶ Play / Pause", command=toggle_pause, bootstyle="info-outline")
-stop_playback_btn = ttk.Button(player_frame, text="■ Stop", command=stop_playback, bootstyle="danger-outline")
+pause_btn = ttk.Button(
+    player_frame, text="▶ Play / Pause", command=toggle_pause, bootstyle="info-outline", width=14
+)
+stop_playback_btn = ttk.Button(
+    player_frame, text="■ Stop", command=stop_playback, bootstyle="danger-outline", width=8
+)
 pause_btn.grid(row=1, column=0, sticky="ew", padx=(0, 4))
 stop_playback_btn.grid(row=1, column=1, sticky="ew", padx=(4, 0))
 restart_btn = ttk.Button(
@@ -588,8 +592,8 @@ mini_player_btn = ttk.Button(
     player_frame, text="⤡ Mini Player", command=lambda: enter_mini_mode(), bootstyle="secondary-outline"
 )
 mini_player_btn.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(6, 0))
-player_frame.columnconfigure(0, weight=1)
-player_frame.columnconfigure(1, weight=1)
+player_frame.columnconfigure(0, weight=1, minsize=130)
+player_frame.columnconfigure(1, weight=1, minsize=90)
 
 # Settings drawer (docked, hidden until toggled)
 drawer_wrapper = ttk.Frame(app, width=260)
@@ -622,7 +626,7 @@ exit_btn.grid(row=0, column=1)
 
 app.columnconfigure(0, weight=2)
 app.columnconfigure(1, weight=2)
-app.columnconfigure(2, weight=1)
+app.columnconfigure(2, weight=1, minsize=260)
 app.columnconfigure(3, weight=0)
 app.rowconfigure(1, weight=1)
 app.rowconfigure(3, weight=1)
