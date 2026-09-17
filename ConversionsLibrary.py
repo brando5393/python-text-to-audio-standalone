@@ -22,8 +22,8 @@ class ConversionsLibrary:
         self.tree.heading("pages", text="Pages", anchor="w")
         self.tree.heading("chapters", text="Chapters", anchor="w")
         self.tree.heading("voice", text="Voice", anchor="w")
-        self.tree.column("pages", width=55, anchor="w", stretch=False)
-        self.tree.column("chapters", width=70, anchor="w", stretch=False)
+        self.tree.column("pages", width=70, anchor="w", stretch=False)
+        self.tree.column("chapters", width=80, anchor="w", stretch=False)
         self.tree.column("voice", width=130, anchor="w", stretch=False)
 
         # A ttk Treeview's row height is a fixed pixel number the theme computes once
@@ -87,8 +87,8 @@ class ConversionsLibrary:
                 kwargs = {"image": self._audio_icon} if self._audio_icon is not None else {}
                 sidecar = self._sidecar_for(entry.path)
                 values = (
-                    sidecar.get("pages") or "",
-                    sidecar.get("chapters") or "",
+                    sidecar.get("pages") or "Unknown",
+                    sidecar.get("chapters") or "Unknown",
                     sidecar.get("voice_label") or "",
                 )
                 node = self.tree.insert(parent_id, "end", text=entry.name, values=values, **kwargs)

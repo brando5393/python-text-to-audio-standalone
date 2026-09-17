@@ -15,6 +15,21 @@ SUPPORTED_EXTENSIONS = (
 _MARKDOWN_SYNTAX = re.compile(r"(^#{1,6}\s+|\*+|_+|`{1,3}|^>\s?|^-{3,}$)", re.MULTILINE)
 _MARKDOWN_LINK = re.compile(r"\[([^\]]+)\]\([^)]+\)")
 
+# Matches a line that looks like a chapter heading on its own -- "Chapter 3", "CHAPTER
+# ONE", "Part IV", "Book Two" -- used only as a fallback guess for formats/documents with
+# no real structural metadata to consult (see estimate_structure below).
+_CHAPTER_HEADING_LINE = re.compile(
+    r"^\s*(chapter|part|book)\s+("
+    r"[ivxlcdm]+|\d+|one|two|three|four|five|six|seven|eight|nine|ten|"
+    r"eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty"
+    r")\s*[:.]?\s*$",
+    re.IGNORECASE,
+)
+
+# A rough, widely-used rule of thumb for converting character count to a printed-page
+# equivalent (about 500 words/page at ~6 characters per word including spaces).
+_CHARS_PER_PAGE = 3000
+
 
 def extract_text(file_path):
     """Extracts plain text from a supported document. Raises ValueError for unsupported types."""
@@ -52,6 +67,25 @@ def extract_structure_counts(file_path):
     if ext == ".docx":
         return None, _count_docx_chapters(file_path)
     return None, None
+
+
+def estimate_structure(text):
+    """Rough (pages, chapters) guess from plain text alone, for whichever of the two
+    extract_structure_counts() couldn't determine from real structural metadata -- a
+    plain .txt file, a DOCX with no Heading 1 styles, an EPUB with no detectable chapter
+    documents, and so on. Callers are expected to only use whichever half this returns
+    that their real detection left as None; this never overrides a real count.
+
+    Returns None for either half that couldn't even be guessed (e.g. no chapter-heading
+    -looking lines found), so callers still have a clean signal to show a placeholder
+    instead of a fabricated-looking number.
+    """
+    if not text or not text.strip():
+        return None, None
+    pages = max(1, round(len(text) / _CHARS_PER_PAGE))
+    heading_count = sum(1 for line in text.splitlines() if _CHAPTER_HEADING_LINE.match(line))
+    chapters = heading_count if heading_count >= 2 else None
+    return pages, chapters
 
 
 def extract_chapters(file_path):

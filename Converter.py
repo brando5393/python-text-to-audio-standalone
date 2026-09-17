@@ -183,6 +183,16 @@ class Converter:
                     pages, chapters = TextExtraction.extract_structure_counts(file)
                 except Exception:
                     pages, chapters = None, None  # a display-only convenience; never worth failing the conversion over
+                if pages is None or chapters is None:
+                    try:
+                        # Uses `text` (sanitized but still multi-line), not `clean_text` --
+                        # chapter-heading detection needs real line boundaries, which
+                        # clean_text has already flattened away.
+                        est_pages, est_chapters = TextExtraction.estimate_structure(text)
+                    except Exception:
+                        est_pages, est_chapters = None, None
+                    pages = pages if pages is not None else est_pages
+                    chapters = chapters if chapters is not None else est_chapters
                 plan.append({
                     "file": file, "chunks": chunks, "output_file": output_file, "text": clean_text,
                     "pages": pages, "chapters": chapters, "use_piper": use_piper, "settings": item_settings,

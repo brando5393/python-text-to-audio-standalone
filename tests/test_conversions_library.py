@@ -92,7 +92,7 @@ def test_sidecar_json_files_are_not_listed_as_entries(tk_root, tmp_path):
     assert "chapter.wav.json" not in texts
 
 
-def test_files_without_sidecar_show_blank_voice(tk_root, tmp_path):
+def test_files_without_sidecar_show_unknown_pages_and_chapters_and_blank_voice(tk_root, tmp_path):
     (tmp_path / "old_file.wav").write_bytes(b"data")
 
     tree = ttk.Treeview(tk_root, show="tree")
@@ -100,7 +100,7 @@ def test_files_without_sidecar_show_blank_voice(tk_root, tmp_path):
 
     for item in tree.get_children(""):
         if tree.item(item, "text") == "old_file.wav":
-            assert tree.item(item, "values") == ("", "", "")
+            assert tree.item(item, "values") == ("Unknown", "Unknown", "")
 
 
 def test_pages_and_chapters_columns_read_sidecar_metadata(tk_root, tmp_path):
@@ -119,9 +119,9 @@ def test_pages_and_chapters_columns_read_sidecar_metadata(tk_root, tmp_path):
     for item in tree.get_children(""):
         name = tree.item(item, "text")
         if name == "book.wav":
-            assert tree.item(item, "values") == ("301", "", "Ryan (US, high)")
+            assert tree.item(item, "values") == ("301", "Unknown", "Ryan (US, high)")
         elif name == "novel.wav":
-            assert tree.item(item, "values") == ("", "12", "Amy (US, medium)")
+            assert tree.item(item, "values") == ("Unknown", "12", "Amy (US, medium)")
 
 
 def test_text_for_reads_stored_source_text(tk_root, tmp_path):

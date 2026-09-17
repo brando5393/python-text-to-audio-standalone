@@ -152,6 +152,42 @@ def test_extract_structure_counts_txt_returns_none_none(tmp_path):
     assert te.extract_structure_counts(str(path)) == (None, None)
 
 
+def test_estimate_structure_returns_none_none_for_empty_text():
+    assert te.estimate_structure("") == (None, None)
+    assert te.estimate_structure("   \n  ") == (None, None)
+
+
+def test_estimate_structure_estimates_pages_from_character_count():
+    pages, chapters = te.estimate_structure("x" * 9000)
+    assert pages == 3  # 9000 chars / 3000 chars-per-page
+    assert chapters is None  # no chapter-heading-looking lines present
+
+
+def test_estimate_structure_never_returns_zero_pages_for_short_text():
+    pages, _ = te.estimate_structure("A single short sentence.")
+    assert pages == 1
+
+
+def test_estimate_structure_detects_chapter_heading_lines():
+    text = "Chapter 1\nSome text.\n\nCHAPTER TWO\nMore text.\n\nChapter III:\nEven more."
+    pages, chapters = te.estimate_structure(text)
+    assert chapters == 3
+
+
+def test_estimate_structure_ignores_a_single_chapter_heading_line():
+    # One matching line alone is too weak a signal to trust (could be a one-off title
+    # page rather than real recurring chapter structure) -- needs at least two.
+    text = "Chapter 1\n" + ("Filler text. " * 50)
+    _, chapters = te.estimate_structure(text)
+    assert chapters is None
+
+
+def test_estimate_structure_does_not_match_chapter_mentioned_mid_sentence():
+    text = "This chapter covers a lot of ground.\n" + ("Filler text. " * 50)
+    _, chapters = te.estimate_structure(text)
+    assert chapters is None
+
+
 def test_extract_chapters_epub_returns_one_text_per_chapter(tmp_path):
     path = tmp_path / "book.epub"
     _make_epub(path, 3)

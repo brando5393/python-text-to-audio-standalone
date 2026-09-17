@@ -267,6 +267,10 @@ def request_file_info(path):
         try:
             text = TextSanitization.sanitize(TextExtraction.extract_text(path))
             pages, chapters = TextExtraction.extract_structure_counts(path)
+            if pages is None or chapters is None:
+                est_pages, est_chapters = TextExtraction.estimate_structure(text)
+                pages = pages if pages is not None else est_pages
+                chapters = chapters if chapters is not None else est_chapters
             _file_info_queue.put((path, {"pages": pages, "chapters": chapters, "char_count": len(text)}))
         except Exception:
             _file_info_queue.put((path, None))
