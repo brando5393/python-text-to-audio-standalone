@@ -1,16 +1,27 @@
 import os
 import re
 import shutil
+import xml.etree.ElementTree as ET
 
 import docx
 import pypdf
 from bs4 import BeautifulSoup
 from ebooklib import ITEM_DOCUMENT, epub
+from odf import teletype
+from odf.opendocument import load as load_odf
+from odf.text import P as OdfParagraph
+from pptx import Presentation
 from striprtf.striprtf import rtf_to_text
 
 SUPPORTED_EXTENSIONS = (
-    ".txt", ".md", ".pdf", ".epub", ".mobi", ".azw3", ".docx", ".rtf", ".html", ".htm",
+    ".txt", ".md", ".pdf", ".epub", ".mobi", ".azw3", ".azw", ".prc", ".docx", ".rtf",
+    ".html", ".htm", ".xhtml", ".fb2", ".pptx", ".odt",
 )
+
+# FictionBook 2 wraps its body in a namespaced <FictionBook> root; the namespace URI has
+# stayed the same since the format's 2005 origin, but every element lookup still needs it
+# spelled out since ElementTree has no FB2-aware namespace map built in.
+_FB2_NS = {"fb": "http://www.gribuser.ru/xml/fictionbook/2.0"}
 
 _MARKDOWN_SYNTAX = re.compile(r"(^#{1,6}\s+|\*+|_+|`{1,3}|^>\s?|^-{3,}$)", re.MULTILINE)
 _MARKDOWN_LINK = re.compile(r"\[([^\]]+)\]\([^)]+\)")
@@ -42,14 +53,20 @@ def extract_text(file_path):
         return _extract_pdf(file_path)
     if ext == ".epub":
         return _extract_epub(file_path)
-    if ext in (".mobi", ".azw3"):
+    if ext in (".mobi", ".azw3", ".azw", ".prc"):
         return _extract_mobi(file_path)
     if ext == ".docx":
         return _extract_docx(file_path)
     if ext == ".rtf":
         return _extract_rtf(file_path)
-    if ext in (".html", ".htm"):
+    if ext in (".html", ".htm", ".xhtml"):
         return _extract_html(file_path)
+    if ext == ".fb2":
+        return _extract_fb2(file_path)
+    if ext == ".pptx":
+        return _extract_pptx(file_path)
+    if ext == ".odt":
+        return _extract_odt(file_path)
     raise ValueError(f"Unsupported file type: {ext}")
 
 
@@ -62,10 +79,14 @@ def extract_structure_counts(file_path):
         return _count_pdf_pages(file_path), None
     if ext == ".epub":
         return None, _count_epub_chapters(file_path)
-    if ext in (".mobi", ".azw3"):
+    if ext in (".mobi", ".azw3", ".azw", ".prc"):
         return _count_mobi_structure(file_path)
     if ext == ".docx":
         return None, _count_docx_chapters(file_path)
+    if ext == ".fb2":
+        return None, _count_fb2_chapters(file_path)
+    if ext == ".pptx":
+        return _count_pptx_slides(file_path), None
     return None, None
 
 
@@ -103,8 +124,10 @@ def extract_chapters(file_path):
         return _extract_epub_chapters(file_path)
     if ext == ".docx":
         return _extract_docx_chapters(file_path)
-    if ext in (".mobi", ".azw3"):
+    if ext in (".mobi", ".azw3", ".azw", ".prc"):
         return _extract_mobi_chapters(file_path)
+    if ext == ".fb2":
+        return _extract_fb2_chapters(file_path)
     return None
 
 
@@ -267,3 +290,68 @@ def _extract_html(path):
     with open(path, "r", encoding="utf-8", errors="ignore") as html_file:
         soup = BeautifulSoup(html_file.read(), "html.parser")
         return soup.get_text(separator=" ")
+
+
+def _fb2_main_body(root):
+    # FB2 can carry more than one <body> -- footnotes/endnotes get their own body with a
+    # "name" attribute (commonly "notes"); the unnamed one is the actual story text.
+    bodies = root.findall("fb:body", _FB2_NS)
+    for body in bodies:
+        if "name" not in body.attrib:
+            return body
+    return bodies[0] if bodies else None
+
+
+def _extract_fb2(path):
+    root = ET.parse(path).getroot()
+    body = _fb2_main_body(root)
+    if body is None:
+        return ""
+    return "\n".join(chunk.strip() for chunk in body.itertext() if chunk.strip())
+
+
+def _count_fb2_chapters(path):
+    root = ET.parse(path).getroot()
+    body = _fb2_main_body(root)
+    if body is None:
+        return None
+    count = len(body.findall("fb:section", _FB2_NS))
+    return count or None
+
+
+def _extract_fb2_chapters(path):
+    root = ET.parse(path).getroot()
+    body = _fb2_main_body(root)
+    if body is None:
+        return None
+    sections = body.findall("fb:section", _FB2_NS)
+    if len(sections) < 2:
+        return None
+    return [
+        "\n".join(chunk.strip() for chunk in section.itertext() if chunk.strip())
+        for section in sections
+    ]
+
+
+def _extract_pptx(path):
+    presentation = Presentation(path)
+    slides = []
+    for slide in presentation.slides:
+        frames = [
+            shape.text_frame.text
+            for shape in slide.shapes
+            if shape.has_text_frame and shape.text_frame.text.strip()
+        ]
+        if frames:
+            slides.append("\n".join(frames))
+    return "\n\n".join(slides)
+
+
+def _count_pptx_slides(path):
+    return len(Presentation(path).slides)
+
+
+def _extract_odt(path):
+    document = load_odf(path)
+    paragraphs = document.getElementsByType(OdfParagraph)
+    return "\n".join(teletype.extractText(p) for p in paragraphs)

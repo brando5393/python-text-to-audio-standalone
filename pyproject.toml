@@ -29,6 +29,8 @@ numpy = "^2.5.0"
 # outright on a clean end-user machine) -- caught by actually building and inspecting
 # the frozen .exe output, not by reading the dependency's changelog.
 soundfile = "^0.14.0"
+python-pptx = "^1.0.2"
+odfpy = "^1.4.1"
 
 [tool.poetry.group.dev.dependencies]
 cx-freeze = "^8.7.0"

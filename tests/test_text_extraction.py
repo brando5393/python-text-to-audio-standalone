@@ -4,6 +4,9 @@ import docx
 import pypdf
 import pytest
 from ebooklib import epub
+from odf.opendocument import OpenDocumentText
+from odf.text import P as OdfParagraph
+from pptx import Presentation
 
 import TextExtraction as te
 
@@ -76,6 +79,80 @@ def test_extract_epub(tmp_path):
     assert "Some epub content." in result
 
 
+def test_extract_xhtml(tmp_path):
+    path = tmp_path / "page.xhtml"
+    path.write_text(
+        '<?xml version="1.0"?><html><body><h1>Title</h1><p>Body text.</p></body></html>',
+        encoding="utf-8",
+    )
+    result = te.extract_text(str(path))
+    assert "Title" in result
+    assert "Body text." in result
+
+
+_FB2_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">
+  <body>
+    <section><title><p>Chapter One</p></title><p>First chapter prose.</p></section>
+    <section><title><p>Chapter Two</p></title><p>Second chapter prose.</p></section>
+  </body>
+  <body name="notes">
+    <section><p>A footnote, not part of the main text.</p></section>
+  </body>
+</FictionBook>
+"""
+
+
+def _make_fb2(path):
+    path.write_text(_FB2_TEMPLATE, encoding="utf-8")
+
+
+def test_extract_fb2(tmp_path):
+    path = tmp_path / "book.fb2"
+    _make_fb2(path)
+    result = te.extract_text(str(path))
+    assert "First chapter prose." in result
+    assert "Second chapter prose." in result
+    assert "A footnote" not in result
+
+
+def test_extract_pptx(tmp_path):
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[1])
+    slide.shapes.title.text = "Slide Title"
+    slide.placeholders[1].text_frame.text = "Body text"
+    path = tmp_path / "deck.pptx"
+    prs.save(str(path))
+    result = te.extract_text(str(path))
+    assert "Slide Title" in result
+    assert "Body text" in result
+
+
+def test_extract_odt(tmp_path):
+    doc = OpenDocumentText()
+    doc.text.addElement(OdfParagraph(text="First paragraph."))
+    doc.text.addElement(OdfParagraph(text="Second paragraph."))
+    path = tmp_path / "doc.odt"
+    doc.save(str(path))
+    result = te.extract_text(str(path))
+    assert "First paragraph." in result
+    assert "Second paragraph." in result
+
+
+@pytest.mark.parametrize("ext", [".azw", ".prc"])
+def test_azw_and_prc_route_through_the_mobi_extractor(tmp_path, monkeypatch, ext):
+    # .azw and .prc are the same underlying Palm-database Kindle format as .mobi/.azw3 --
+    # the `mobi` library sniffs the file's binary header, not its extension -- so real
+    # extraction is already covered by the .mobi/.azw3 code path; this just confirms
+    # dispatch reaches it instead of raising ValueError.
+    calls = []
+    monkeypatch.setattr(te, "_extract_mobi", lambda path: calls.append(path) or "extracted")
+    path = tmp_path / f"book{ext}"
+    path.write_bytes(b"fake mobi bytes")
+    assert te.extract_text(str(path)) == "extracted"
+    assert calls == [str(path)]
+
+
 def test_unsupported_extension_raises_value_error(tmp_path):
     path = tmp_path / "image.png"
     path.write_bytes(b"\x89PNG")
@@ -144,6 +221,21 @@ def test_extract_structure_counts_docx_returns_none_without_headings(tmp_path):
     path = tmp_path / "doc.docx"
     doc.save(str(path))
     assert te.extract_structure_counts(str(path)) == (None, None)
+
+
+def test_extract_structure_counts_fb2_returns_chapter_count(tmp_path):
+    path = tmp_path / "book.fb2"
+    _make_fb2(path)
+    assert te.extract_structure_counts(str(path)) == (None, 2)
+
+
+def test_extract_structure_counts_pptx_returns_slide_count(tmp_path):
+    prs = Presentation()
+    for _ in range(3):
+        prs.slides.add_slide(prs.slide_layouts[6])
+    path = tmp_path / "deck.pptx"
+    prs.save(str(path))
+    assert te.extract_structure_counts(str(path)) == (3, None)
 
 
 def test_extract_structure_counts_txt_returns_none_none(tmp_path):
@@ -233,6 +325,16 @@ def test_extract_chapters_docx_returns_none_without_headings(tmp_path):
     path = tmp_path / "doc.docx"
     doc.save(str(path))
     assert te.extract_chapters(str(path)) is None
+
+
+def test_extract_chapters_fb2_returns_one_text_per_chapter(tmp_path):
+    path = tmp_path / "book.fb2"
+    _make_fb2(path)
+    chapters = te.extract_chapters(str(path))
+    assert len(chapters) == 2
+    assert "First chapter prose." in chapters[0]
+    assert "Second chapter prose." not in chapters[0]
+    assert "Second chapter prose." in chapters[1]
 
 
 def test_extract_chapters_returns_none_for_unsupported_format(tmp_path):
