@@ -144,6 +144,16 @@ def process(source_chunk, speed, tone_semitones):
     if n == 0:
         return source_chunk, 0
 
+    if speed == 1.0 and tone_semitones == 0.0:
+        # WSOLA's analysis/synthesis windowing is not an identity operation even at a
+        # neutral factor -- every chunk gets re-resynthesized from scratch (see
+        # AudioPlayer.CHUNK_SECONDS: each 1-second chunk is its own independent WSOLA
+        # pass, with no window/phase continuity carried over from the previous one),
+        # which is audible as a subtle metallic/robotic quality and a seam once per
+        # chunk. Passing the source straight through at default settings avoids
+        # touching audio that was never supposed to be time-stretched at all.
+        return source_chunk, n
+
     pitch_ratio = 2.0 ** (tone_semitones / 12.0)
     combined = pitch_ratio * max(0.1, speed)
 
