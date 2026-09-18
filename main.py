@@ -63,6 +63,14 @@ batch_had_done = False
 sleep_timer = SleepTimer.SleepTimer()
 media_key_hook = None
 
+# The full event history for whatever conversion batch is currently running (or just
+# finished), so the progress dialog can be reopened after being closed/hidden and
+# immediately catch up to the real current state, rather than starting from a blank
+# slate -- Converter.poll_events() only ever delivers each event once, so without this
+# there'd be no way to reconstruct "how far along is this" after the dialog's gone.
+_current_batch_events = []
+_conversion_in_progress = False
+
 
 def enter_mini_mode(persist=True):
     global mini_player
@@ -339,29 +347,51 @@ def refresh_file_info_label():
 
 
 def poll_conversions():
-    global batch_had_error, batch_had_done
+    global batch_had_error, batch_had_done, _conversion_in_progress
     events = converter.poll_events()
     if events:
         if any(event[0] in ("done", "error") for event in events):
             refresh_library()
-        if progress_dialog is not None and progress_dialog.winfo_exists():
-            progress_dialog.handle_events(events)
         for event in events:
             if event[0] == "plan":
                 batch_had_error = False  # a new batch is starting
                 batch_had_done = False
+                _current_batch_events.clear()
+                _conversion_in_progress = True
             elif event[0] == "error":
                 batch_had_error = True
             elif event[0] == "done":
                 batch_had_done = True
             elif event[0] == "all_done":
+                _conversion_in_progress = False
                 ConversionQueue.clear()  # the batch is no longer "in progress" either way
                 if batch_had_error:
                     SoundEffects.play("error")
                 elif batch_had_done:
                     SoundEffects.play("conversion_done")
                 # else: everything in the batch was skipped -- nothing worth chiming for.
+            _current_batch_events.append(event)
+        if progress_dialog is not None and progress_dialog.winfo_exists():
+            progress_dialog.handle_events(events)
+        show_progress_btn.configure(state="normal" if _conversion_in_progress else "disabled")
     app.after(300, poll_conversions)
+
+
+def show_progress_dialog():
+    """Reopens the conversion progress window -- clicking "Hide" on it (or closing it)
+    only stops updating that window, it never stops or loses track of the conversion
+    itself, so there needs to be a way back in. Replays this batch's full event history
+    into a freshly-built dialog so it catches up to the real current state instantly,
+    rather than sitting blank until the next live update arrives."""
+    global progress_dialog
+    if progress_dialog is not None and progress_dialog.winfo_exists():
+        progress_dialog.lift()
+        progress_dialog.focus_force()
+        return
+    if not _current_batch_events:
+        return
+    progress_dialog = ProgressDialog(app, converter, 0)
+    progress_dialog.handle_events(_current_batch_events)
 
 
 def _play_path(path):
@@ -1086,12 +1116,22 @@ split_chapters_hint = ttk.Label(
     bootstyle="secondary", justify="left", font=("Segoe UI", 8),
 )
 
+# Enabled only while a conversion is actually running (see poll_conversions) -- the
+# progress window's own "Hide" button just closes it, it never stops or forgets about
+# the conversion, so this is the only way back in if you closed it and want to check on
+# it, e.g. after switching to another program for a while.
+show_progress_btn = ttk.Button(
+    controls_frame, text="Show Conversion Progress", command=show_progress_dialog,
+    bootstyle="secondary-outline", state="disabled",
+)
+
 add_files_btn.grid(row=0, column=0, sticky="ew", pady=(0, 6))
 del_file_btn.grid(row=1, column=0, sticky="ew", pady=(0, 6))
 del_all_btn.grid(row=2, column=0, sticky="ew", pady=(0, 6))
 split_chapters_check.grid(row=3, column=0, sticky="w", pady=(0, 2))
 split_chapters_hint.grid(row=4, column=0, sticky="w", pady=(0, 6))
 convert_btn.grid(row=5, column=0, sticky="ew", ipady=4)
+show_progress_btn.grid(row=6, column=0, sticky="ew", pady=(6, 0))
 controls_frame.columnconfigure(0, weight=1)
 
 # Keyboard shortcuts for power users, mirroring what the buttons already do rather than
