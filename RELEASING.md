@@ -39,6 +39,67 @@ The Piper TTS engine and voice models are downloaded on demand from Settings (se
 `PiperEngine.py`), not bundled into the installer -- that keeps the `.msi` small.
 `pyttsx3`/SAPI (the system voice) works immediately with no extra download.
 
+### Installer: optional MCP Server feature
+
+The `.msi` also carries a second, optional Executable, `TalebrewMCP.exe` (built from
+`mcp_server.py` -- see `MCP_SETUP.md`), behind an "Install MCP Server support" checkbox
+in the wizard, **unchecked by default**: most people installing Talebrew just want the
+desktop app, and the checkbox is the one signal that a user actually wants the AI-agent
+integration bundled in.
+
+cx_Freeze's `bdist_msi` has no single high-level option for "make this one Executable an
+optional, checkbox-selectable install component" -- `bdist_msi.add_files()` always puts
+every file into one Feature ("default", installed for everyone). `setup.py` supplies a
+custom `bdist_msi` subclass (`msi_mcp_feature.py`, wired in via `cmdclass=`) that, after
+cx_Freeze's own `add_files()` runs, does direct `msilib` table work: moves
+`TalebrewMCP.exe`'s Component (and its generated Claude-config JSON's) out of "default"
+and into a new "MCPServer" Feature, gives that Feature a `Level` above the installer's
+default `INSTALLLEVEL` (excluded unless selected), adds a `Condition` table row that
+drops the Level back down when a property is set, and adds one small custom dialog into
+the wizard (`InstallUISequence`, between cx_Freeze's own `SelectDirectoryDlg` and
+`LicenseAgreementDlg`) with a checkbox bound to that property. See
+`msi_mcp_feature.py`'s own docstring for the full mechanics and why each piece is needed.
+This follows the same "extend cx_Freeze via `bdist_msi_options`/direct table rows, don't
+fork it" convention the Start Menu `Shortcut` row (`setup.py`'s `bdist_msi_options["data"]`)
+already established -- nothing here patches a disabled internal the way the abandoned
+installer-bitmap idea below would have.
+
+**A real, honest limitation this hit**: cx_Freeze's `build_exe_options["packages"]` is a
+single build-wide (`Freezer`-level) option, not a per-`Executable` one -- confirmed by
+reading `cx_Freeze/executable.py` (`Executable.__init__` takes no packages/includes of
+its own) and `cx_Freeze/freezer.py` (`Freezer.packages` is one set shared by the whole
+build). So `Talebrew.exe` and `TalebrewMCP.exe` necessarily share one forced-include
+package list and one output `lib` folder when built in a single `bdist_msi` invocation --
+there's no cx_Freeze knob to force `sounddevice`/`numpy`/`soundfile` into just
+`Talebrew.exe`'s dependency closure and leave them out of `TalebrewMCP.exe`'s physical
+footprint. What's still true, and was verified directly rather than assumed: `mcp_server.py`
+and everything it imports (`Config`/`ConversionsLibrary`/`Converter`/`FileManager`/
+`TextExtraction`/`JobStore`) never references `sounddevice`/`numpy`/`soundfile`/
+`AudioPlayer`, so `TalebrewMCP.exe` never loads or calls into them at runtime, even though
+they're physically present in the shared install directory. A genuinely separate,
+smaller-on-disk `TalebrewMCP`-only tree would need two independent `build_exe`/`bdist_msi`
+invocations merged together afterward -- a bigger restructuring not undertaken here,
+consistent with this project's habit of documenting a real limitation instead of forcing
+a fragile workaround.
+
+**Cryptography note**: the `mcp` dependency group's `cryptography` pin is
+platform-conditional (see `pyproject.toml`) -- an old, vulnerable-but-only-one-with-wheels
+version on ARM64, the current patched one everywhere else. A `.msi` built locally on this
+project's ARM64 dev machine therefore bundles the older `cryptography` inside
+`TalebrewMCP.exe`'s dependency closure; CI (`windows-latest`, x64) picks up the current
+patched version automatically, since it resolves against whatever's installed in *its*
+environment. Don't treat a local ARM64 build's bundled `cryptography` version as
+representative of what a release actually ships -- check the CI-built artifact if that
+ever matters.
+
+The generated `talebrew_mcp_claude_config.json` (written into the build tree by
+`setup.py`'s `_write_generated_mcp_config()`, not committed to source control) bakes in
+`C:\Program Files\Talebrew\TalebrewMCP.exe` -- the default `initial_target_dir` -- because
+cx_Freeze's minimal installer UI has no custom-action hook to learn the user's *actually
+chosen* `TARGETDIR` and write it into a file at install time without a lot more machinery
+(a real custom-action script/DLL). A user who installs somewhere else needs to hand-edit
+that one path; `MCP_SETUP.md` says so.
+
 ### Installer branding
 
 `bdist_msi_options["install_icon"]` (in `setup.py`) puts Talebrew's icon on the
@@ -86,21 +147,33 @@ and the "Auto-updates" section of `README.md` for exactly what that does and doe
 ## Building and testing the installer locally
 
 ```
-poetry install
+poetry install --with mcp
 poetry run python setup.py bdist_msi
 ```
+
+Building now needs the `mcp` dependency group -- not just `poetry install` -- because
+`setup.py` also freezes `TalebrewMCP.exe` from `mcp_server.py` (see "Installer: optional
+MCP Server feature" above), and imports `mcp` directly to fail fast with a clear message
+if that group isn't installed, rather than a confusing cx_Freeze error partway through
+the build.
 
 The `.msi` lands in `dist\Talebrew-<version>-win-arm64.msi` (or `-win-amd64` on an
 Intel/AMD machine -- cx_Freeze builds for whatever architecture it runs on, it does not
 cross-compile). To verify it before tagging:
 
-1. **Smoke-test the frozen exe directly**, without installing anything:
-   `build\exe.<platform>\Talebrew.exe` should launch and show the normal window --
-   this is the fastest way to catch a packaging problem (a missing data file, a bad
-   icon path) without going through a full install/uninstall cycle.
+1. **Smoke-test both frozen exes directly**, without installing anything:
+   `build\exe.<platform>\Talebrew.exe` should launch and show the normal window, and
+   `build\exe.<platform>\TalebrewMCP.exe` should start and sit waiting for stdio input
+   with no window (an MCP client, not a human, talks to it -- see MCP_SETUP.md's
+   troubleshooting section for what "working" looks like from a terminal). This is the
+   fastest way to catch a packaging problem (a missing data file, a bad icon path)
+   without going through a full install/uninstall cycle.
 2. **Run the actual installer**: double-click the `.msi` in `dist\`. Confirm it adds
    both a Desktop and a Start Menu shortcut, and that the app launches correctly from
-   each.
+   each. Leave "Install MCP Server support" unchecked once and confirm `TalebrewMCP.exe`
+   is *not* present afterward; run it again with the box checked and confirm it *is*
+   present, alongside a `talebrew_mcp_claude_config.json` with the real install path
+   filled in.
 3. **Uninstall** via "Apps & features" (search the Start Menu for "Talebrew" or open
    `appwiz.cpl`) and confirm it's removed cleanly.
 
