@@ -193,6 +193,13 @@ class AudioPlayer:
             self._chunks.clear()
             self._chunk_offset = 0
             self._produce_from = target_frame
+            # Discarding queued-but-unheard chunks without this leaves
+            # _produced_output_frames counting audio that no longer exists anywhere --
+            # the producer's own back-pressure check (ahead_frames = produced -
+            # consumed) then reads as permanently "already buffered ahead" even though
+            # the buffer is empty, and it never produces another chunk again. Silent,
+            # permanent playback stall, worse the further into a file the seek lands.
+            self._produced_output_frames = self._consumed_output_frames
             self._finished = False
             self._restart_event.set()
         if self._stream is not None and not self._playing:
@@ -247,6 +254,10 @@ class AudioPlayer:
         self._chunks.clear()
         self._chunk_offset = 0
         self._produce_from = self._heard_source_frame
+        # See seek_ms's matching comment: without this, the producer's back-pressure
+        # accounting goes stale the moment queued chunks are discarded and it stalls
+        # forever instead of refilling the now-empty buffer.
+        self._produced_output_frames = self._consumed_output_frames
         self._finished = False
         self._restart_event.set()
 
