@@ -48,14 +48,20 @@ optional = true
 
 [tool.poetry.group.mcp.dependencies]
 mcp = "^1.2.0"
-# Pinned below mcp's own transitive floor (via pyjwt[crypto]) on purpose: cryptography
-# only ships prebuilt win_arm64 wheels through 46.0.3 (verified directly with
-# `pip download --platform win_arm64 --only-binary=:all:`) -- 47.0.0+ has none yet, which
-# forces a from-source build requiring Rust + a local OpenSSL/vcpkg install that isn't
-# present here, and fails outright (see the "cargo:warning=Could not find directory of
-# OpenSSL installation" build error this pin avoids). Same class of issue as numpy/
-# soundfile's ARM64 wheel-availability pins above.
-cryptography = "46.0.3"
+# Platform-conditional, not a single hard pin: cryptography only ships prebuilt
+# win_arm64 wheels through 46.0.3 (verified directly with `pip download --platform
+# win_arm64 --only-binary=:all:` -- confirmed 46.0.4 already dropped win_arm64, not just
+# 47.0.0+ as first thought), and 46.0.3 carries several since-disclosed CVEs (see
+# GitHub's Dependabot alerts on this repo -- self-signed path-building, a PKCS#7
+# Bleichenbacher oracle, an SECT-curve subgroup attack, among others). Pinning everyone
+# to that old, vulnerable build just to accommodate one ARM64 dev machine would be
+# irresponsible: the overwhelming majority of people setting up the MCP server are on
+# x64, where the latest cryptography installs fine and has none of these issues. Poetry
+# resolves each machine's own applicable constraint at install time.
+cryptography = [
+    { version = "46.0.3", markers = "platform_machine == 'ARM64'" },
+    { version = ">=50.0.1", markers = "platform_machine != 'ARM64'" },
+]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
