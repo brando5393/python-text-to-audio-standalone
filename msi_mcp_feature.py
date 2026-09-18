@@ -190,7 +190,12 @@ class BdistMsiWithOptionalMcpFeature(_CxFreezeBdistMsi):
         )
         button = dialog.pushbutton("Next", self.width - 145, self.height - 35, 56, 17, 3, "Next >", "Cancel")
         button.event("EndDialog", "Return")
-        button = dialog.pushbutton("Cancel", self.width - 85, self.height - 35, 56, 17, 3, "Cancel", None)
+        # Windows Installer requires every dialog's Control_Next chain to form one closed
+        # loop (used for Tab-key navigation) -- leaving this as None broke the loop
+        # (InstallMcp -> Next -> Cancel -> nowhere) and made the installer's dialog
+        # engine reject the whole package at install time with error 2809. Closing the
+        # loop back to the checkbox fixes it.
+        button = dialog.pushbutton("Cancel", self.width - 85, self.height - 35, 56, 17, 3, "Cancel", "InstallMcp")
         button.event("SpawnDialog", "CancelDlg")
 
         # Shown right after the user picks an install directory, before the license
