@@ -133,9 +133,11 @@ it without a hack.
    `v` and match `__version__` exactly (e.g. `v0.2.0` for `__version__ = "0.2.0"`) --
    `.github/workflows/release.yml` checks this and fails the build if they disagree.
 6. **CI takes over** (`.github/workflows/release.yml`, triggered by the tag push): it
-   installs dependencies, re-runs the full test suite, builds the `.msi` via
-   `poetry run python setup.py bdist_msi`, and attaches it to a new GitHub Release
-   (auto-generated release notes from commits since the last tag).
+   installs dependencies (`poetry install --with mcp`, the same `mcp` extras group the
+   local build needs -- see "Building and testing the installer locally" below), re-runs
+   the full test suite, builds the `.msi` via `poetry run python setup.py bdist_msi`, and
+   attaches it to a new GitHub Release (auto-generated release notes from commits since
+   the last tag).
 7. **Existing installs update themselves**: `AppUpdater.py` polls this repo's latest
    release on startup; anyone running an older version sees an in-app banner offering to
    download and install the new one.
