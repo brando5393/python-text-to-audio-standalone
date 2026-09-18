@@ -92,6 +92,14 @@ environment. Don't treat a local ARM64 build's bundled `cryptography` version as
 representative of what a release actually ships -- check the CI-built artifact if that
 ever matters.
 
+This is why GitHub's Dependabot tab on this repo shows open alerts against `cryptography`
+(as of 2026-09-18: 7 open, GHSA-jwv3-5hgf-82ww, GHSA-m2h6-j472-rp4c, GHSA-g6cj-pr64-35w5,
+GHSA-537c-gmf6-5ccf, GHSA-p423-j2cm-9vmq, GHSA-m959-cc7f-wv43, GHSA-r6ph-v2qm-q3c2) even
+though no shipped release is affected -- they're all against the ARM64-only `46.0.3` pin,
+not the `>=50.0.1` resolved for x64 in `poetry.lock`, which already carries the fixes for
+all of them. Accepted risk, scoped to building/running the optional MCP server locally on
+ARM64; re-evaluate if `cryptography` ever ships a newer win_arm64 wheel.
+
 The generated `talebrew_mcp_claude_config.json` (written into the build tree by
 `setup.py`'s `_write_generated_mcp_config()`, not committed to source control) bakes in
 `C:\Program Files\Talebrew\TalebrewMCP.exe` -- the default `initial_target_dir` -- because
