@@ -128,9 +128,11 @@ it without a hack.
 
 ## Releasing a new version
 
-1. **Bump the version.** Edit `version.py`'s `__version__` and `pyproject.toml`'s
-   `[tool.poetry].version` to match (both need updating; nothing currently automates
-   keeping them in sync -- consider that a good follow-up).
+1. **Bump the version**: `poetry run python scripts/bump_version.py X.Y.Z` updates both
+   `version.py`'s `__version__` and `pyproject.toml`'s `[tool.poetry].version` together,
+   so they can't drift apart from a hand-edit only touching one of them.
+   `tests/test_version_sync.py` also asserts the two agree, on every push/PR (not just at
+   tag time), so a stale value in either file fails the test suite immediately.
 2. **Run the test suite locally**: `poetry run pytest tests/ -q`. All tests must pass
    before tagging.
 3. **Build and smoke-test the installer locally** (see below) before pushing the tag --
