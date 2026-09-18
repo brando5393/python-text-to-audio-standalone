@@ -26,13 +26,65 @@ JOBS_PATH = os.path.join(JOBS_DIR, "mcp_jobs.json")
 # recent context.
 MAX_EVENTS_PER_JOB = 50
 
+# How long a writer waits to acquire the cross-process lock before deciding it must be
+# stale (see _CrossProcessLock) -- generous relative to how fast a load-mutate-save
+# cycle actually takes, since it's only ever hit under real contention.
+_LOCK_TIMEOUT_SECONDS = 5.0
+_LOCK_POLL_SECONDS = 0.02
+
+
+class _CrossProcessLock:
+    """A simple mutex usable across separate OS processes, via the atomicity of
+    os.O_CREAT | os.O_EXCL (fails if the file already exists -- the same primitive
+    Converter.py's own resume-checkpoint writes rely on for atomic replace via
+    os.replace, just applied here to acquisition instead of the final write).
+
+    threading.Lock only serializes calls within one process; mcp_server.py can be
+    spawned as a separate process per MCP client session (see this module's docstring),
+    so two such processes each doing JobStore's load-mutate-save cycle on the same file
+    need a lock neither process's in-memory state can provide -- without one, whichever
+    process's save() runs last silently overwrites the other's update to a *different*
+    job, or to the same job, with no error and no trace of what was lost.
+    """
+
+    def __init__(self, lock_path):
+        self._lock_path = lock_path
+
+    def __enter__(self):
+        deadline = time.time() + _LOCK_TIMEOUT_SECONDS
+        while True:
+            try:
+                fd = os.open(self._lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                os.close(fd)
+                return self
+            except FileExistsError:
+                if time.time() >= deadline:
+                    # A process that crashed while holding the lock leaves it stale
+                    # forever -- break it rather than let every future call hang. A
+                    # false break during genuine (if unusually slow) contention just
+                    # costs the loser a retry on the next call, versus every job status
+                    # check silently hanging forever without this.
+                    try:
+                        os.remove(self._lock_path)
+                    except OSError:
+                        pass
+                    continue
+                time.sleep(_LOCK_POLL_SECONDS)
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        try:
+            os.remove(self._lock_path)
+        except OSError:
+            pass
+
 
 class JobStore:
-    """Thread-safe, file-backed store for MCP conversion job status."""
+    """Thread- and process-safe, file-backed store for MCP conversion job status."""
 
     def __init__(self, path=None):
         self._path = path or JOBS_PATH
         self._lock = threading.Lock()
+        self._file_lock = _CrossProcessLock(self._path + ".lock")
 
     def _load(self):
         try:
@@ -49,7 +101,8 @@ class JobStore:
         os.replace(tmp_path, self._path)
 
     def create(self, job_id, path, engine, voice, output_dir):
-        with self._lock:
+        os.makedirs(os.path.dirname(self._path), exist_ok=True)
+        with self._lock, self._file_lock:
             jobs = self._load()
             jobs[job_id] = {
                 "job_id": job_id,
@@ -80,7 +133,8 @@ class JobStore:
         (kind, file, extra).
         """
         kind = event[0]
-        with self._lock:
+        os.makedirs(os.path.dirname(self._path), exist_ok=True)
+        with self._lock, self._file_lock:
             jobs = self._load()
             job = jobs.get(job_id)
             if job is None:

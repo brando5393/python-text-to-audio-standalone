@@ -3,6 +3,7 @@ get_conversion_status -- see JobStore.py's module docstring for why this is file
 rather than an in-memory dict."""
 
 import json
+import threading
 
 from JobStore import JobStore, MAX_EVENTS_PER_JOB
 
@@ -123,3 +124,35 @@ def test_all_jobs_returns_every_created_job(tmp_path):
 
     jobs = store.all_jobs()
     assert set(jobs.keys()) == {"job1", "job2"}
+
+
+def test_concurrent_writers_do_not_lose_each_others_events(tmp_path):
+    """Regression: JobStore's own threading.Lock only serializes calls made through one
+    JobStore instance/process -- but mcp_server.py can be spawned as a separate OS
+    process per MCP client session (see the module docstring), so two such processes,
+    each with their own independent JobStore/Lock, can genuinely race on the same file.
+    record_event's load-mutate-save is not atomic across them without a real
+    cross-process lock: whichever save() lands last silently overwrites the other's
+    update with no error. A fresh JobStore instance per thread here (rather than one
+    shared instance) mirrors that -- no in-memory state or lock is shared between them,
+    only the file on disk."""
+    path = str(tmp_path / "jobs.json")
+    JobStore(path).create("job1", path="/x/book.txt", engine="piper", voice=None, output_dir="/out")
+
+    writer_count = 20
+
+    def write_one(n):
+        JobStore(path).record_event(
+            "job1", ("progress", "/x/book.txt", n, writer_count, n, writer_count, float(n))
+        )
+
+    threads = [threading.Thread(target=write_one, args=(n,)) for n in range(writer_count)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=10.0)
+        assert not t.is_alive()
+
+    job = JobStore(path).get("job1")
+    recorded = {e["data"][1] for e in job["events"] if e["kind"] == "progress"}
+    assert recorded == set(range(writer_count))

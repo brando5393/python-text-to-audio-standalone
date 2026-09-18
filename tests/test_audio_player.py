@@ -1,3 +1,4 @@
+import threading
 import time
 import wave
 
@@ -268,6 +269,72 @@ def test_two_independent_players_do_not_share_state(tmp_path):
         assert preview_player.current_path() == path_b  # untouched by stopping the other
     finally:
         preview_player.stop()
+
+
+# -- stop()/play() thread-join race -----------------------------------------------
+
+
+def test_stop_gives_the_producer_thread_a_fresh_stop_event_each_generation(tmp_path):
+    """A stop_event .clear()-ed and reused for the next generation would let a producer
+    thread that outlived stop()'s join(timeout=1.0) get "un-stopped" the instant a
+    following play() clears it -- see play()'s comment. Each generation must get its
+    own Event object instead, and the old one must stay permanently set."""
+    path = _make_wav(tmp_path / "book.wav", seconds=1.0, rate=8000)
+    player = AudioPlayer()
+    player.play(path)
+    old_stop_event = player._stop_event
+    old_generation = player._generation
+    try:
+        player.stop()
+        player.play(path)
+        assert player._stop_event is not old_stop_event
+        assert old_stop_event.is_set()
+        assert player._generation != old_generation
+    finally:
+        player.stop()
+
+
+def test_a_producer_thread_that_outlives_stops_join_timeout_still_terminates(tmp_path, monkeypatch):
+    """Regression for the exact race: simulates the producer thread being stuck inside
+    AudioStretch.process() (CPU-bound, not interruptible) for longer than stop()'s 1s
+    join timeout, so stop() returns while the old ("zombie") thread is still alive.
+    Before the fix, a following play() would clear the same stop_event the zombie was
+    waiting on, "un-stopping" it -- it would then run forever, racing the new
+    generation's producer over the same buffer. With the fix, the zombie's own
+    generation's stop_event stays permanently set, so it must still exit promptly once
+    its blocked call finally returns, no matter what later play()/stop() calls do."""
+    path = _make_wav(tmp_path / "book.wav", seconds=2.0, rate=8000)
+    player = AudioPlayer()
+
+    release_zombie = threading.Event()
+    real_process = AudioPlayer_module.AudioStretch.process
+    first_call_seen = threading.Event()
+
+    calls = {"n": 0}
+
+    def blocking_on_first_call(chunk, speed, tone):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            first_call_seen.set()
+            release_zombie.wait(timeout=5.0)
+        return real_process(chunk, speed, tone)
+
+    monkeypatch.setattr(AudioPlayer_module.AudioStretch, "process", blocking_on_first_call)
+
+    player.play(path)
+    assert first_call_seen.wait(timeout=3.0)
+    zombie_thread = player._producer_thread
+
+    player.stop()  # join(timeout=1.0) times out -- the thread is still blocked above
+    assert zombie_thread.is_alive()  # confirms this test actually exercised the timeout
+
+    player.play(path)  # a real bug would clear the zombie's stop_event here
+    try:
+        release_zombie.set()  # let the zombie's blocked call finally return
+        assert _wait_until(lambda: not zombie_thread.is_alive(), timeout=3.0)
+    finally:
+        release_zombie.set()
+        player.stop()
 
 
 def test_two_players_get_independent_output_streams(tmp_path):

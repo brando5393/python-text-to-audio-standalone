@@ -120,6 +120,10 @@ class AudioPlayer:
         self._restart_event = threading.Event()
         self._producer_thread = None
         self._stream = None
+        # Bumped on every play() -- see play()'s comment on why this, plus never
+        # reusing/clearing a stop_event across generations, is what makes a producer
+        # thread that outlives stop()'s join timeout harmless.
+        self._generation = 0
 
     # -- public transport controls (unchanged interface from the MCI-era player) -----
 
@@ -141,9 +145,26 @@ class AudioPlayer:
         self._consumed_output_frames = 0
         self._finished = False
 
-        self._stop_event.clear()
-        self._restart_event.clear()
-        self._producer_thread = threading.Thread(target=self._produce_loop, daemon=True)
+        # A fresh Event per generation, not .clear()-ed reuse of the old one: if the
+        # self.stop() call above ever hits its join(timeout=1.0) because the producer
+        # thread was mid-AudioStretch.process() (CPU-bound, not interruptible), that
+        # thread is still alive right now. Clearing the *same* stop_event object would
+        # "un-stop" that zombie thread the instant it finally checks it, letting it run
+        # forever racing this new generation's producer over the same buffer/counters.
+        # A new Event object means the zombie's closed-over reference stays permanently
+        # set no matter what this or any later play()/stop() does to self._stop_event,
+        # so it exits on its very next loop check. self._generation is a second,
+        # belt-and-suspenders guard: it's stamped on every chunk _produce_loop appends,
+        # so even a chunk the zombie manages to produce in the brief window before it
+        # notices its stop_event is discarded rather than corrupting this playback.
+        self._generation += 1
+        generation = self._generation
+        self._stop_event = threading.Event()
+        self._restart_event = threading.Event()
+        self._producer_thread = threading.Thread(
+            target=self._produce_loop, args=(generation, self._stop_event, self._restart_event),
+            daemon=True,
+        )
         self._producer_thread.start()
 
         self._stream = sd.OutputStream(
@@ -286,8 +307,8 @@ class AudioPlayer:
         if finished_and_empty and filled == 0:
             self._playing = False
 
-    def _produce_loop(self):
-        while not self._stop_event.is_set():
+    def _produce_loop(self, generation, stop_event, restart_event):
+        while not stop_event.is_set():
             with self._lock:
                 start = self._produce_from
                 speed = self._speed
@@ -297,13 +318,13 @@ class AudioPlayer:
             if start >= self._total_frames:
                 with self._lock:
                     self._finished = True
-                self._restart_event.wait(timeout=0.2)
-                self._restart_event.clear()
+                restart_event.wait(timeout=0.2)
+                restart_event.clear()
                 continue
 
             if ahead_frames > BUFFER_AHEAD_SECONDS * self._samplerate:
-                if self._restart_event.wait(timeout=0.05):
-                    self._restart_event.clear()
+                if restart_event.wait(timeout=0.05):
+                    restart_event.clear()
                 continue
 
             chunk_len = int(CHUNK_SECONDS * self._samplerate)
@@ -312,8 +333,14 @@ class AudioPlayer:
             processed, consumed = AudioStretch.process(source_chunk, speed, tone)
 
             with self._lock:
-                if self._produce_from != start:
-                    continue  # a seek/speed/tone change happened mid-process -- discard, it's stale
+                # Both halves of this check matter: _produce_from catches an ordinary
+                # seek/speed/tone change mid-process; _generation catches a producer
+                # thread from a stop()ped/replayed generation that's still running (see
+                # play()'s comment) -- without it, a coincidental start==_produce_from
+                # match (e.g. both generations happen to resume from frame 0) would let
+                # a stale chunk slip into this generation's buffer.
+                if self._produce_from != start or self._generation != generation:
+                    continue  # stale -- discard
                 self._chunks.append((processed, start, start + consumed))
                 self._produced_output_frames += processed.shape[0]
                 self._produce_from = start + consumed
