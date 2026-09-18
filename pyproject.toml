@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "talebrew"
-version = "0.3.0"
+version = "0.4.0"
 description = "Talebrew: a proper Windows app that turns your heaviest reading into a flawless listening experience."
 authors = ["Brandon Williams"]
 package-mode = false
