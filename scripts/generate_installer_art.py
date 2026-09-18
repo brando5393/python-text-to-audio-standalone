@@ -78,7 +78,9 @@ def make_dialog_background():
         (width // 2, panel_top + 14), "Talebrew", font=_title_font(26), fill=CREAM, anchor="ma",
     )
     draw.text(
-        (width // 2, panel_top + 48), "Every story, brewed aloud.", font=_subtitle_font(13), fill=CREAM, anchor="ma",
+        (width // 2, panel_top + 48),
+        "A proper Windows app for turning heavy reading into flawless listening.",
+        font=_subtitle_font(10), fill=CREAM, anchor="ma",
     )
 
     img.save(os.path.join(ASSETS_DIR, "installer_dialog.bmp"))

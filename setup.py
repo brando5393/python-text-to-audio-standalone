@@ -48,7 +48,7 @@ bdist_msi_options = {
 setup(
     name="Talebrew",
     version=__version__,
-    description="Every story, brewed aloud -- converts text, PDF, and ebook files to audio using offline text-to-speech.",
+    description="A proper Windows app that turns your heaviest reading into a flawless listening experience.",
     options={"build_exe": build_exe_options, "bdist_msi": bdist_msi_options},
     executables=[
         Executable(

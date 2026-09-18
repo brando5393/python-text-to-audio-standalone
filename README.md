@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)](pyproject.toml)
 
-*Every story, brewed aloud.*
+*A proper Windows app that turns your heaviest reading into a flawless listening experience.*
 
 **[Website &rarr;](https://brando5393.github.io/talebrew/)** &mdash; download page and feature overview.
 

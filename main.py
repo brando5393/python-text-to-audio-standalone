@@ -638,7 +638,7 @@ AppIcon.claim_taskbar_identity()
 # window narrows -- see apply_layout_tier() -- rather than relying on a large fixed floor
 # to keep content from clipping the way earlier, non-responsive versions of this window
 # needed to.
-app = ttk.Window(title="Talebrew — Every story, brewed aloud.", themename=THEME, size=(1340, 900), minsize=(480, 600))
+app = ttk.Window(title="Talebrew", themename=THEME, size=(1340, 900), minsize=(480, 600))
 # Withdrawn immediately and only shown again once the icon is set (near the end of this
 # file, right before mainloop): Windows' taskbar button caches whatever icon the window
 # had the moment it first became visible, so setting the icon after a frame has already
@@ -658,7 +658,9 @@ header_block.grid(row=0, column=0, sticky="w", padx=24, pady=(16, 10))
 title_label = ttk.Label(header_block, text="Talebrew", font=("Palatino Linotype", 21, "bold"))
 title_label.pack(anchor="w")
 ttk.Label(
-    header_block, text=f"Every story, brewed aloud.  ·  v{__version__}", bootstyle="secondary",
+    header_block,
+    text=f"A proper Windows app that turns your heaviest reading into a flawless listening experience.  ·  v{__version__}",
+    bootstyle="secondary", wraplength=420, justify="left",
 ).pack(anchor="w")
 
 settings_toggle_btn = ttk.Button(app, text="⚙ Settings", command=toggle_settings_drawer, bootstyle="secondary-outline")
