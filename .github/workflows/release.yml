@@ -28,7 +28,9 @@ jobs:
         run: pip install poetry
 
       - name: Install dependencies
-        run: poetry install
+        # --with mcp: bdist_msi now also builds TalebrewMCP.exe (see msi_mcp_feature.py),
+        # which needs the mcp extras group installed, not just the base dependencies.
+        run: poetry install --with mcp
 
       - name: Run tests
         run: poetry run pytest tests/ -v
