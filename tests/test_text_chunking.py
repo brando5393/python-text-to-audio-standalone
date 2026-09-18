@@ -24,6 +24,16 @@ def test_single_sentence_longer_than_limit_is_hard_split():
     assert all(len(c) <= 1000 for c in chunks)
 
 
+def test_oversized_sentence_after_a_normal_one_is_still_hard_split():
+    # A short leading sentence followed by a run-on with no internal punctuation
+    # (common in OCR'd/scanned text) used to skip the hard-split entirely: the
+    # "does this fit in `current`" branch matched first and assigned the whole
+    # oversized sentence to `current` unsplit.
+    text = "Hi there. " + "word " * 500  # short sentence, then a 2500-char run-on
+    chunks = tc.split_into_chunks(text, max_chars=1000)
+    assert all(len(c) <= 1000 for c in chunks)
+
+
 def test_empty_text_yields_no_chunks():
     assert tc.split_into_chunks("") == []
 

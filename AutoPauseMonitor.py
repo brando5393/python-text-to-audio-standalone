@@ -183,6 +183,16 @@ class AutoPauseMonitor:
             self._polling = True
             self.app.after(self.poll_interval_ms, self._tick)
 
+    def notify_playback_changed(self):
+        """Call whenever playback is explicitly stopped or switched to a different file
+        (not paused by the auto-pause logic itself) -- without this, resetting the
+        controller's own _auto_paused flag, a call/notification that started while file A
+        was playing and ends only after the user has moved on to file B (stopped A,
+        started B, maybe paused B manually) would force-resume B against the user's own
+        explicit pause, since the controller still thinks it owns an unresolved
+        auto-pause from A."""
+        self.controller.reset()
+
     def _tick(self):
         if self._enabled:
             try:

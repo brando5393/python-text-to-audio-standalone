@@ -304,8 +304,16 @@ class Converter:
                     self._events.put(("progress", file, i + 1, total, global_done, total_chunks, elapsed))
                     if total > 1 and ((i + 1) % log_every == 0 or i + 1 == total):
                         self.logger.add_event("info", f"Converting '{os.path.basename(file)}': {i + 1}/{total} sections")
+                    # Records the pcm file's actual size *as of this successful save*, not
+                    # just the chunk count -- so a resume can tell whether pcm_path already
+                    # has more bytes than this checkpoint accounts for (e.g. the crash
+                    # landed between appending a chunk's audio and saving this checkpoint)
+                    # and truncate the excess instead of duplicating that chunk's audio by
+                    # re-synthesizing and re-appending it on top of what's already there.
+                    pcm_bytes = os.path.getsize(pcm_path) if os.path.isfile(pcm_path) else 0
                     _save_resume_state(
-                        progress_path, i + 1, total, text_hash, resume_use_piper, resume_settings.get("voice"), wav_info
+                        progress_path, i + 1, total, text_hash, resume_use_piper, resume_settings.get("voice"),
+                        wav_info, pcm_bytes,
                     )
 
                 if not os.path.isfile(pcm_path) or os.path.getsize(pcm_path) == 0:
@@ -418,16 +426,31 @@ def _load_resume_state(progress_path, pcm_path, text_hash, total_chunks):
         return None
     if data.get("text_hash") != text_hash or data.get("total_chunks") != total_chunks:
         return None
+    pcm_bytes = data.get("pcm_bytes")
+    if pcm_bytes is not None:
+        actual_size = os.path.getsize(pcm_path)
+        if actual_size < pcm_bytes:
+            # Less audio on disk than this checkpoint claims -- can't trust completed_chunks
+            # either, so don't resume into a checkpoint that doesn't match reality.
+            return None
+        if actual_size > pcm_bytes:
+            # More audio on disk than this checkpoint accounts for: the crash landed
+            # between appending a chunk's audio and saving the checkpoint that would have
+            # recorded it. Truncate the unrecorded tail rather than resuming and
+            # re-synthesizing that same chunk on top of it, which would duplicate it.
+            with open(pcm_path, "r+b") as pcm_file:
+                pcm_file.truncate(pcm_bytes)
     return data
 
 
-def _save_resume_state(progress_path, completed_chunks, total_chunks, text_hash, use_piper, voice_id, wav_info):
+def _save_resume_state(progress_path, completed_chunks, total_chunks, text_hash, use_piper, voice_id, wav_info, pcm_bytes):
     state = {
         "completed_chunks": completed_chunks,
         "total_chunks": total_chunks,
         "text_hash": text_hash,
         "engine": "piper" if use_piper else "pyttsx3",
         "voice_id": voice_id,
+        "pcm_bytes": pcm_bytes,
         **wav_info,
     }
     tmp_path = progress_path + ".tmp"

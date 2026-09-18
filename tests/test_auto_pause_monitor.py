@@ -1,4 +1,4 @@
-from AutoPauseMonitor import AutoPauseController
+from AutoPauseMonitor import AutoPauseController, AutoPauseMonitor
 
 
 def test_pauses_when_other_audio_starts_while_playing():
@@ -85,3 +85,27 @@ def test_reset_clears_auto_pause_tracking():
     assert controller.auto_paused is True
     controller.reset()
     assert controller.auto_paused is False
+
+
+class _FakeApp:
+    def after(self, *_args, **_kwargs):
+        pass
+
+
+class _FakePlayer:
+    def is_playing(self):
+        return True
+
+
+def test_notify_playback_changed_resets_a_stale_auto_pause():
+    """Without this, switching files (or stopping) while an auto-pause from the
+    *previous* file is still unresolved would leave the controller thinking it owns a
+    pause it no longer does -- so once the call/notification that triggered it ends, it
+    would force-resume whatever's playing now, even if the user paused that manually."""
+    monitor = AutoPauseMonitor(_FakeApp(), _FakePlayer())
+    monitor.controller.evaluate(other_audio_active=True, is_playing=True, now=0.0)
+    assert monitor.controller.auto_paused is True
+
+    monitor.notify_playback_changed()
+
+    assert monitor.controller.auto_paused is False

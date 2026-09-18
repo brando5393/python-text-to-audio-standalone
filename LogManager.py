@@ -89,7 +89,15 @@ class LogManager:
         self.logger.setLevel(logging.DEBUG)
         self.logger.propagate = False
 
-        if not self.logger.handlers:
+        # main.py, FileManager.py, and Converter.py each construct their own LogManager
+        # against the same shared "texttoaudio" logger and (usually) the same on-screen
+        # widget -- this guard is what makes only the *first* instance's handlers (and
+        # therefore its _display_queue) actually receive anything. Tracked explicitly
+        # rather than re-checking self.logger.handlers below, since a second/third
+        # instance's own _display_queue would otherwise still get a poll loop scheduled
+        # against it further down, spinning forever on a queue nothing ever fills.
+        owns_handlers = not self.logger.handlers
+        if owns_handlers:
             file_handler = logging.handlers.RotatingFileHandler(
                 LOG_FILE, maxBytes=1_000_000, backupCount=3, encoding="utf-8"
             )
@@ -107,8 +115,11 @@ class LogManager:
         # Skipped entirely when there's no widget to update (headless use) -- there's no
         # Tk event loop to schedule onto in the first place, and nothing would ever drain
         # _display_queue, so entries just accumulate there harmlessly (bounded by
-        # max_rows worth of interest only when something is actually reading them).
-        if self.app_log_display is not None:
+        # max_rows worth of interest only when something is actually reading them). Also
+        # skipped for a second/third instance that didn't own the handlers above -- its
+        # own _display_queue never receives anything either, so polling it would just be
+        # a permanently-idle timer running for the rest of the app's life.
+        if self.app_log_display is not None and owns_handlers:
             self.app_log_display.after(POLL_INTERVAL_MS, self._poll_display_queue)
 
     def _poll_display_queue(self):

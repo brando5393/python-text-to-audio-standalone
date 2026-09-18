@@ -401,6 +401,7 @@ def _play_path(path):
     try:
         resume_position_ms = _resolve_resume_position(path)
         player.play(path)
+        auto_pause_monitor.notify_playback_changed()
         if resume_position_ms:
             player.seek_ms(resume_position_ms)
         now_playing_var.set(f"Now playing: {path.split(chr(92))[-1]}")
@@ -535,6 +536,7 @@ def stop_playback():
     if path:
         PlaybackMemory.save_position(path, player.position_ms())
     player.stop()
+    auto_pause_monitor.notify_playback_changed()
     now_playing_var.set("Nothing playing")
     player_progress_var.set(0)
     player_time_var.set("0:00 / 0:00")
@@ -915,10 +917,6 @@ next_btn = ttk.Button(player_frame, text="⏭ Next", command=play_next, bootstyl
 prev_btn.grid(row=6, column=0, sticky="ew", padx=(0, 4), pady=(6, 0))
 next_btn.grid(row=6, column=1, sticky="ew", padx=(4, 0), pady=(6, 0))
 
-auto_play_var = tk.BooleanVar(value=True)
-auto_play_check = ttk.Checkbutton(
-    player_frame, text="Auto-play next", variable=auto_play_var, bootstyle="round-toggle",
-)
 # Speed/Tone: live playback controls (not synthesis settings -- see PlaybackControls.py),
 # applied immediately to whatever's currently playing or paused, no re-conversion needed.
 # Its own row (7) -- this previously shared row 6 with the Prev/Next buttons above, which

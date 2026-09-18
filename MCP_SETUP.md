@@ -18,7 +18,7 @@ It also drops a ready-to-paste config file, `talebrew_mcp_claude_config.json`, i
 }
 ```
 
-Copy that straight into `claude_desktop_config.json` (see Option B, step 2, for where that file lives) or `.mcp.json`. If you installed Talebrew somewhere other than the default directory, edit the `command` path in the generated file to match -- the installer can't know your chosen path at the time it generates this file (see `RELEASING.md`'s "Installer: optional MCP Server feature" section for why), so it always fills in the default location.
+Copy that straight into `claude_desktop_config.json` (see Option B, step 2, for where that file lives) or `.mcp.json` -- but check the `command` path first. The generated file always assumes the same default install directory the installer starts with pre-filled (`C:\Program Files\Talebrew\`), since the installer can't know your *actual* chosen path at the time it generates this file (see `RELEASING.md`'s "Installer: optional MCP Server feature" section for why). That default only holds if the install actually ran elevated (as an administrator); **installing without admin rights is common and silently lands somewhere else entirely** -- typically `C:\Users\<you>\AppData\Local\Programs\Talebrew\` -- in which case the generated config's path is wrong and needs hand-editing before it'll work. If in doubt, check where `TalebrewMCP.exe` actually is (search the Start Menu for "Talebrew", right-click > Open file location) and use that path instead.
 
 Since `TalebrewMCP.exe` is a self-contained frozen binary (no Python/Poetry involved), you don't need `args` or `cwd` in the config the way Option B's `poetry run` command does.
 

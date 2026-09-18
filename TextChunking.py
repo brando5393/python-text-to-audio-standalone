@@ -17,17 +17,23 @@ def split_into_chunks(text, max_chars=MAX_CHUNK_CHARS):
     for sentence in sentences:
         if not sentence:
             continue
-        if current and len(current) + 1 + len(sentence) > max_chars:
-            chunks.append(current)
-            current = sentence
-        elif len(sentence) > max_chars:
+        if len(sentence) > max_chars:
             # A single sentence longer than the limit: hard-split it so no chunk is ever
             # too large for the engine, even if it means a mid-sentence audio boundary.
+            # Checked before the "does it fit in current" branch below, and
+            # unconditionally rather than as its elif -- otherwise an oversized sentence
+            # that happens to follow a non-empty `current` skipped this hard-split
+            # entirely and got assigned to `current` whole, producing a chunk far past
+            # max_chars (e.g. a short leading sentence followed by a 10,000-char
+            # run-on with no internal punctuation, common in OCR'd/scanned text).
             if current:
                 chunks.append(current)
                 current = ""
             for i in range(0, len(sentence), max_chars):
                 chunks.append(sentence[i:i + max_chars])
+        elif current and len(current) + 1 + len(sentence) > max_chars:
+            chunks.append(current)
+            current = sentence
         else:
             current = f"{current} {sentence}".strip()
     if current:

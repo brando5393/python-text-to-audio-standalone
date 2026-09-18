@@ -200,5 +200,53 @@ def test_save_resume_state_survives_unwritable_progress_path(tmp_path):
     from under a long-running conversion), losing that one checkpoint must not raise and
     kill the whole conversion -- the next chunk just tries to checkpoint again."""
     missing_dir_path = str(tmp_path / "does_not_exist" / "book.wav.progress.json")
-    Converter._save_resume_state(missing_dir_path, 1, 10, "hash", False, None, {})  # must not raise
+    Converter._save_resume_state(missing_dir_path, 1, 10, "hash", False, None, {}, 0)  # must not raise
     assert not os.path.isfile(missing_dir_path)
+
+
+def test_load_resume_state_truncates_pcm_written_past_the_last_checkpoint(tmp_path):
+    """Reproduces the crash-between-writes race directly: a chunk's audio got appended to
+    the .partial.pcm file, but the process died before _save_resume_state recorded that in
+    progress.json. Without truncating back to the last confirmed-good size, resuming would
+    re-synthesize that same chunk and append it again, duplicating it in the final audio."""
+    progress_path = str(tmp_path / "book.wav.progress.json")
+    pcm_path = str(tmp_path / "book.wav.partial.pcm")
+
+    confirmed_bytes = b"\x01\x02" * 50  # what the last successful checkpoint recorded
+    unrecorded_extra = b"\x03\x04" * 50  # a chunk appended after that, before the crash
+    with open(pcm_path, "wb") as f:
+        f.write(confirmed_bytes + unrecorded_extra)
+    with open(progress_path, "w", encoding="utf-8") as f:
+        json.dump(
+            {
+                "completed_chunks": 1, "total_chunks": 10, "text_hash": "abc",
+                "pcm_bytes": len(confirmed_bytes),
+            },
+            f,
+        )
+
+    result = Converter._load_resume_state(progress_path, pcm_path, "abc", 10)
+    assert result is not None
+    assert result["completed_chunks"] == 1
+
+    with open(pcm_path, "rb") as f:
+        on_disk = f.read()
+    assert on_disk == confirmed_bytes, "unrecorded trailing audio must be truncated away, not kept"
+
+
+def test_load_resume_state_rejects_checkpoint_when_pcm_is_smaller_than_recorded():
+    """If the pcm file somehow has *less* data than the checkpoint claims (e.g. a partial
+    truncated write, or a scratch file replaced by hand), completed_chunks can't be
+    trusted either -- resuming would skip real audio silently, so it must start over."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        progress_path = os.path.join(tmp, "book.wav.progress.json")
+        pcm_path = os.path.join(tmp, "book.wav.partial.pcm")
+        with open(pcm_path, "wb") as f:
+            f.write(b"\x00\x00")
+        with open(progress_path, "w", encoding="utf-8") as f:
+            json.dump({"completed_chunks": 1, "total_chunks": 10, "text_hash": "abc", "pcm_bytes": 9999}, f)
+
+        result = Converter._load_resume_state(progress_path, pcm_path, "abc", 10)
+        assert result is None
